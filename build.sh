@@ -56,11 +56,23 @@ CENTER_LAT=44.462
 CENTER_ZOOM=14
 
 # Pinned tool and asset versions, so a rebuild in six months produces the same
-# shape of output as one today.
-PMTILES_VERSION="1.28.0"                                        # go-pmtiles CLI
-PMTILES_PY_VERSION="3.7.0"                                      # PyPI pmtiles, used by the assembler
-BASEMAPS_STYLE_VERSION="5.7.2"                                  # npm @protomaps/basemaps
-ASSETS_COMMIT="028c18f713baecad011301ff7a69acc39bcc2ae7"        # protomaps/basemaps-assets
+# shape of output as one today. Renovate keeps these current — the comments above
+# each one are what it matches on, so keep them attached (see renovate.json).
+#
+# The style package version is deliberately not here: scripts/make-style.mjs
+# reads it from the installed @protomaps/basemaps, so package.json is the single
+# place it is pinned.
+
+# renovate: datasource=github-releases depName=protomaps/go-pmtiles
+PMTILES_VERSION="1.28.0"
+
+# renovate: datasource=pypi depName=pmtiles
+PMTILES_PY_VERSION="3.7.0"
+
+# The font and sprite assets are a repo without releases, so this tracks the tip
+# of its default branch by digest.
+# renovate: datasource=git-refs depName=https://github.com/protomaps/basemaps-assets branch=main
+ASSETS_COMMIT="028c18f713baecad011301ff7a69acc39bcc2ae7"
 
 # The Protomaps daily builds are retained for about a week and there is no index
 # to list them, so probe backwards from today until one answers.
@@ -252,7 +264,6 @@ MINZOOM="$MINZOOM" \
 MAXZOOM="$MAXZOOM" \
 STYLE_MAXZOOM="$STYLE_MAXZOOM" \
 CENTER_LON="$CENTER_LON" CENTER_LAT="$CENTER_LAT" CENTER_ZOOM="$CENTER_ZOOM" \
-BASEMAPS_STYLE_VERSION="$BASEMAPS_STYLE_VERSION" \
   node "$ROOT/scripts/make-style.mjs" "$DIST"
 
 cp "$ROOT/site/index.html" "$DIST/index.html"

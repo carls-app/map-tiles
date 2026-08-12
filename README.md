@@ -324,6 +324,39 @@ Monthly is deliberate: OSM data for a college town does not move fast, and the
 Protomaps daily builds this pulls from are only retained for about a week, so
 `build.sh` probes backwards from today to find one.
 
+The publish step waits until Pages is actually serving the archive it just
+built — comparing hashes, not just waiting for a `200` — before running its
+checks. Waiting for a `200` is useless here: the previous deployment answers
+`200` for the whole window, so the checks would pass against stale content and
+prove nothing about what was pushed.
+
+## Dependencies
+
+Renovate keeps things current, configured in `renovate.json` off the same base
+as [StoDevX/AAO-React-Native][aao]'s.
+
+Four things are pinned, in three places:
+
+| What | Where | How Renovate sees it |
+| --- | --- | --- |
+| `@protomaps/basemaps` | `package.json` | npm manager |
+| `actions/*` | `.github/workflows/build.yml` | github-actions manager, digest-pinned |
+| `go-pmtiles`, PyPI `pmtiles` | `build.sh` | custom manager, `# renovate:` comments |
+| `protomaps/basemaps-assets` | `build.sh` | custom manager, commit digest off `main` |
+
+The `# renovate:` comments above the pins in `build.sh` are load-bearing — they
+are what the custom managers match on. Detach one and that pin silently stops
+being updated.
+
+A **major** bump of `@protomaps/basemaps` needs dashboard approval rather than
+landing on its own, because the style and the tile schema have to move together
+and a mismatch renders a blank map with no error. See [Schema and style
+pairing](#schema-and-style-pairing).
+
+The style package version is not restated in `build.sh`;
+`scripts/make-style.mjs` reads it from the installed package, so the number
+recorded in the style is the one that generated it.
+
 ## Attribution
 
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
