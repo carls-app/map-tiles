@@ -1,0 +1,14 @@
+{
+  "name": "aao-map-tiles",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vector basemap tiles for All About Olaf (StoDevX/AAO-React-Native)",
+  "type": "module",
+  "license": "ODbL-1.0",
+  "scripts": {
+    "build": "./build.sh"
+  },
+  "dependencies": {
+    "@protomaps/basemaps": "5.7.2"
+  }
+}
