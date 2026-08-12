@@ -1,0 +1,55 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    "helpers:pinGitHubActionDigestsToSemver",
+    ":maintainLockFilesWeekly",
+    ":pinAllExceptPeerDependencies",
+    "security:minimumReleaseAgeNpm",
+    ":semanticCommitsDisabled"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "tool versions pinned in build.sh",
+      "managerFilePatterns": ["/^build\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+=\"(?<currentValue>[^\"]+)\""
+      ],
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "protomaps/basemaps-assets pinned by commit in build.sh",
+      "managerFilePatterns": ["/^build\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)\\s+ASSETS_COMMIT=\"(?<currentDigest>[0-9a-f]{40})\""
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "require manual approval for a new major of the style package: it and the tile schema have to move together, and a mismatch renders a blank map with no error",
+      "matchPackageNames": ["@protomaps/basemaps"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "group the GitHub Actions together",
+      "groupName": "github actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "group the pinned build tools together",
+      "groupName": "build tools",
+      "matchFileNames": ["build.sh"]
+    },
+    {
+      "description": "group all patch updates into a single weekly PR",
+      "matchUpdateTypes": ["patch"],
+      "groupName": "all patch updates",
+      "schedule": ["before 9am on monday"]
+    }
+  ],
+  "prConcurrentLimit": 4
+}

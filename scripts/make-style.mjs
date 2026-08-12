@@ -7,8 +7,15 @@
 // Both are the same cartography over the same tiles; only the source differs.
 
 import { writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { layers, namedFlavor } from "@protomaps/basemaps";
+
+// Read the version off the package that is actually installed, rather than
+// restating it in build.sh. The style and the tile schema have to move
+// together, so the number recorded in the style should be the one that
+// generated it, not a second copy that can drift.
+const basemapsVersion = createRequire(import.meta.url)("@protomaps/basemaps/package.json").version;
 
 const out = process.argv[2];
 if (!out) throw new Error("usage: make-style.mjs <outdir>");
@@ -91,7 +98,7 @@ const base = {
   metadata: {
     "aao:generated-by": "carls-app/map-tiles",
     "aao:schema": "protomaps basemap v4",
-    "aao:style-package": `@protomaps/basemaps@${env("BASEMAPS_STYLE_VERSION")}`,
+    "aao:style-package": `@protomaps/basemaps@${basemapsVersion}`,
     "aao:note":
       "Basemap only. Campus building polygons come from ccc-server " +
       "(carleton.api.frogpond.tech/v1/map/geojson) and are drawn by the app on top of this.",

@@ -23,14 +23,14 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -78,12 +78,24 @@ jobs:
         # thing the app fetches is not".
         run: |
           base="https://carls-app.github.io/map-tiles"
+          want=$(sha256sum dist/campus.pmtiles | cut -d' ' -f1)
 
+          # Wait until Pages is serving *this* build. Waiting for a 200 is not
+          # enough: the previous deployment answers 200 for the whole window, so
+          # every check below would pass against stale content and prove nothing
+          # about what was just pushed.
+          got=""
           for i in $(seq 1 20); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/style.json" || true)
-            [ "$code" = "200" ] && break
-            echo "waiting for Pages ($i/20): $code"; sleep 30
+            got=$(curl -sS "$base/campus.pmtiles" | sha256sum | cut -d' ' -f1)
+            [ "$got" = "$want" ] && break
+            echo "waiting for Pages to serve this build ($i/20)"
+            sleep 30
           done
+          if [ "$got" != "$want" ]; then
+            echo "Pages never served this build — wanted $want, still getting $got"
+            exit 1
+          fi
+          echo "Pages is serving this build ($want)"
 
           fail=0
           check() { # url label
@@ -92,19 +104,26 @@ jobs:
             [ "$code" = "200" ] || fail=1
           }
 
-          # Pick a real tile and glyph out of what was just built, rather than
-          # hardcoding paths that a bbox change would invalidate.
-          tile=$(cd dist && find tiles -name '*.pbf' | sort | head -1)
-          glyph=$(cd dist && find fonts -name '0-255.pbf' | sort | head -1)
+          # Probe a deepest-zoom tile, rather than hardcoding a path that a bbox
+          # change would invalidate. awk consumes the whole stream; `head -1`
+          # would close the pipe early and make sort report a broken pipe.
+          tile=$(cd dist && find tiles -name '*.pbf' |
+            awk -F/ '{ if ($2 + 0 >= z) { z = $2 + 0; t = $0 } } END { print t }')
 
           echo "reachability:"
           check "$base/style.json" "style.json"
           check "$base/style-pmtiles.json" "style-pmtiles.json"
           check "$base/campus.pmtiles" "campus.pmtiles"
           check "$base/$tile" "$tile"
-          check "$base/$(printf '%s' "$glyph" | sed 's/ /%20/g')" "$glyph"
           check "$base/sprites/sprite.json" "sprites/sprite.json"
           check "$base/sprites/sprite@2x.png" "sprites/sprite@2x.png"
+
+          # Every fontstack, not just one: a style names three, and a missing
+          # stack renders that text with no labels and no error. Fed by process
+          # substitution, not a pipe, so `fail` survives the loop.
+          while IFS= read -r glyph; do
+            check "$base/$(printf '%s' "$glyph" | sed 's/ /%20/g')" "$glyph"
+          done < <(cd dist && find fonts -name '0-255.pbf' | sort)
 
           # A tile must arrive raw. If Pages ever started gzipping these, or a
           # future change stored them compressed, the app would get garbage.
