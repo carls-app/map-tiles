@@ -258,13 +258,17 @@ while working fine on Pages.)
 ### Changing the bbox or zooms
 
 Everything tunable is in one block at the top of `build.sh`: `BBOX`, `MINZOOM`,
-`MAXZOOM`, `STYLE_MAXZOOM`, the `TIERS` array and `DATA_BOUNDS`.
+`MAXZOOM`, `STYLE_MAXZOOM` and the `TIERS` array.
 
-If you widen the area, change `TIERS` — that is what actually drives extraction —
-and set `DATA_BOUNDS` to match the widest tier. Keep the tiers contiguous and
-covering `MINZOOM..MAXZOOM`, and make the last tier `$BBOX`. Then re-run and
-check the reported sizes; the build refuses to produce a `campus.pmtiles` over
-the 100 MB Pages limit.
+If you widen the area, change `TIERS` — that is what actually drives extraction.
+The data extent written into the styles is the union of the tiers, computed at
+build time, so there is no second place to keep in sync.
+
+The build refuses to start if the tiers leave a zoom gap, overlap, stop short of
+`MAXZOOM`, or contain a bbox that is not `west,south,east,north` — all of which
+otherwise fail silently, a gap showing up as a map that goes blank at one zoom
+and comes back at the next. It also refuses to produce a `campus.pmtiles` over
+the 100 MB Pages limit. Re-run and check the reported sizes.
 
 Build intermediates live in `.work/` and are gitignored, along with `dist/`,
 `*.osm.pbf`, `*.mbtiles` and `*.pmtiles`. None of them belong in git on either

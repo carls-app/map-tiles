@@ -44,12 +44,6 @@ TIERS=(
   "15:15:$BBOX"                      # campus detail
 )
 
-# The data extent of the merged tileset — the widest tier's bbox. This becomes
-# the styles' source `bounds`. It has to be the wide one: if it were BBOX,
-# MapLibre would cull every low-zoom tile except the one over campus and undo
-# the whole point of the tiers above.
-DATA_BOUNDS="-97.9,42.4,-88.4,49.6"
-
 # Where the built site is served from. Written into the styles as absolute URLs,
 # since MapLibre Native resolves style-relative URLs inconsistently.
 SITE_URL="${SITE_URL:-https://carls-app.github.io/map-tiles}"
@@ -83,6 +77,44 @@ WORK="$ROOT/.work"
 log() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 mkdir -p "$WORK"
+
+# --- 0. check the tier config ----------------------------------------------
+#
+# TIERS is the one thing here that is meant to be edited, and the two ways to
+# get it wrong are both silent. A gap in the zoom coverage yields a map that
+# goes blank at one zoom level and comes back at the next; a `bounds` narrower
+# than the data culls tiles that were paid for. So validate the tiers, and
+# derive the data extent from them rather than restating it by hand.
+DATA_BOUNDS="$(
+  MINZOOM="$MINZOOM" MAXZOOM="$MAXZOOM" python3 - "${TIERS[@]}" <<'PY'
+import os, sys
+
+tiers = []
+for spec in sys.argv[1:]:
+    lo, hi, bbox = spec.split(":", 2)
+    w, s, e, n = (float(v) for v in bbox.split(","))
+    if not (w < e and s < n):
+        sys.exit(f"tier {spec!r}: bbox is not west,south,east,north")
+    tiers.append((int(lo), int(hi), (w, s, e, n)))
+
+tiers.sort()
+want = int(os.environ["MINZOOM"])
+for lo, hi, _ in tiers:
+    if lo != want:
+        sys.exit(f"tier zoom coverage breaks at z{want}: next tier starts at z{lo}")
+    if hi < lo:
+        sys.exit(f"tier z{lo}-z{hi} has maxzoom below minzoom")
+    want = hi + 1
+if want - 1 != int(os.environ["MAXZOOM"]):
+    sys.exit(f"tiers cover up to z{want - 1}, but MAXZOOM is z{os.environ['MAXZOOM']}")
+
+# The union of every tier — what the tileset actually spans.
+print("%s,%s,%s,%s" % (
+    min(t[2][0] for t in tiers), min(t[2][1] for t in tiers),
+    max(t[2][2] for t in tiers), max(t[2][3] for t in tiers),
+))
+PY
+)"
 
 # --- 1. tools --------------------------------------------------------------
 
