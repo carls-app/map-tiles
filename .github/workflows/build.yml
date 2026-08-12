@@ -73,18 +73,56 @@ jobs:
           echo "Published $(find . -type f | wc -l) files to gh-pages"
 
       - name: Verify the published site
-        # GitHub Pages takes a moment to pick up the push. Range support in
-        # particular is the thing style-pmtiles.json depends on, so check it
-        # rather than assume it.
+        # Pages takes a minute or two to pick up the push. Checking the live
+        # site is what catches the whole class of "the build was fine but the
+        # thing the app fetches is not".
         run: |
           base="https://carls-app.github.io/map-tiles"
+
           for i in $(seq 1 20); do
             code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/style.json" || true)
             [ "$code" = "200" ] && break
-            echo "waiting for Pages ($i): $code"; sleep 30
+            echo "waiting for Pages ($i/20): $code"; sleep 30
           done
-          echo "--- style.json";  curl -sS -o /dev/null -w '%{http_code}\n' "$base/style.json"
-          echo "--- a tile";      curl -sS -o /dev/null -w '%{http_code}\n' "$base/tiles/15/7904/11856.pbf"
-          echo "--- a glyph";     curl -sS -o /dev/null -w '%{http_code}\n' "$base/fonts/Noto%20Sans%20Regular/0-255.pbf"
-          echo "--- range request on campus.pmtiles"
-          curl -sS -r 0-99 -D - -o /dev/null "$base/campus.pmtiles" | head -20
+
+          fail=0
+          check() { # url label
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$1")
+            echo "  $code  $2"
+            [ "$code" = "200" ] || fail=1
+          }
+
+          # Pick a real tile and glyph out of what was just built, rather than
+          # hardcoding paths that a bbox change would invalidate.
+          tile=$(cd dist && find tiles -name '*.pbf' | sort | head -1)
+          glyph=$(cd dist && find fonts -name '0-255.pbf' | sort | head -1)
+
+          echo "reachability:"
+          check "$base/style.json" "style.json"
+          check "$base/style-pmtiles.json" "style-pmtiles.json"
+          check "$base/campus.pmtiles" "campus.pmtiles"
+          check "$base/$tile" "$tile"
+          check "$base/$(printf '%s' "$glyph" | sed 's/ /%20/g')" "$glyph"
+          check "$base/sprites/sprite.json" "sprites/sprite.json"
+          check "$base/sprites/sprite@2x.png" "sprites/sprite@2x.png"
+
+          # A tile must arrive raw. If Pages ever started gzipping these, or a
+          # future change stored them compressed, the app would get garbage.
+          if curl -sS -D - -o /dev/null "$base/$tile" | grep -qi '^content-encoding:'; then
+            echo "  FAIL: served tile has a Content-Encoding header"; fail=1
+          fi
+
+          # Range support is what style-pmtiles.json depends on. Note this must
+          # be a GET: a HEAD (curl -I) returns 200 and no Content-Range, which
+          # looks like Range is unsupported when it is not.
+          echo "range request (GET, not HEAD):"
+          headers=$(curl -sS -r 0-99 -D - -o /dev/null "$base/campus.pmtiles")
+          echo "$headers" | grep -Ei '^(HTTP|accept-ranges|content-range|content-length)' | sed 's/^/  /'
+          if echo "$headers" | grep -qi '206 Partial Content\|^content-range:'; then
+            echo "  Range requests honoured"
+          else
+            echo "  WARNING: no 206/Content-Range — style-pmtiles.json will not work"
+            echo "  (style.json is unaffected; it does not use range requests)"
+          fi
+
+          [ "$fail" = 0 ] || { echo "published site verification failed"; exit 1; }
