@@ -1,25 +1,14 @@
 #!/usr/bin/env python3
-"""Assemble the per-zoom-tier PMTiles extracts into the two published forms.
+"""Merge the per-zoom-tier PMTiles extracts into one MBTiles staging file.
 
 build.sh pulls several extracts out of the planet archive — a wide one for the
-low zooms, progressively tighter ones as the zoom goes up (see TIERS in
-build.sh). This merges them into:
+low zooms, a tighter one as the zoom goes up (see TIERS in build.sh). This
+merges them into a single MBTiles, which is then joined with the campus layers
+and converted to the published PMTiles archive.
 
-  tiles/{z}/{x}/{y}.pbf   uncompressed, for the guaranteed-to-work path
-  campus.mbtiles          gzipped, staging for `pmtiles convert`
-
-Two things here matter more than they look:
-
-1. The .pbf tree is *uncompressed*. Vector tiles are normally gzipped, but
-   GitHub Pages will not set Content-Encoding on an arbitrary .pbf, so a gzipped
-   tile arrives at the client as garbage with no error to explain it. The
-   MBTiles/PMTiles side keeps its gzip, because those readers decompress
-   from a declared compression field rather than an HTTP header.
-
-2. The tree is XYZ; MBTiles is TMS. PMTiles hands back XYZ, which is what
-   MapLibre asks for, and MBTiles wants the row flipped. Going tree -> MBTiles
-   via mb-util instead of doing the flip here is the classic way to end up with
-   a vertically mirrored map.
+The tiles are XYZ coming out of PMTiles and TMS going into MBTiles, so the row
+is flipped here. Getting that wrong mirrors the map vertically, and nothing
+downstream would complain.
 """
 
 import gzip
@@ -62,18 +51,16 @@ def init_mbtiles(path: str) -> sqlite3.Connection:
 
 
 def main(argv: list[str]) -> None:
-    outdir, mbtiles_path, bounds, center_lon, center_lat, center_zoom = argv[1:7]
-    archives = argv[7:]
+    mbtiles_path, bounds, center_lon, center_lat, center_zoom = argv[1:6]
+    archives = argv[6:]
     if not archives:
-        raise SystemExit("usage: assemble.py <tiledir> <out.mbtiles> <bounds> <clon> <clat> <cz> <archive...>")
+        raise SystemExit("usage: assemble.py <out.mbtiles> <bounds> <clon> <clat> <cz> <archive...>")
 
-    tree_dir = os.path.join(outdir)
     db = init_mbtiles(mbtiles_path)
 
     seen: set[tuple[int, int, int]] = set()
     source_metadata: dict = {}
     zoom_counts: dict[int, int] = {}
-    raw_bytes = 0
 
     for archive in archives:
         with open(archive, "rb") as f:
@@ -90,22 +77,12 @@ def main(argv: list[str]) -> None:
                 seen.add((z, x, y))
 
                 raw = decompress(data, compression)
-                if raw[:2] == b"\x1f\x8b":
-                    raise SystemExit(f"tile {z}/{x}/{y} still gzipped after decompression")
-
-                d = os.path.join(tree_dir, str(z), str(x))
-                os.makedirs(d, exist_ok=True)
-                with open(os.path.join(d, f"{y}.pbf"), "wb") as out:
-                    out.write(raw)
-
                 # MBTiles rows are TMS, counted from the south.
                 db.execute(
                     "INSERT INTO tiles VALUES (?,?,?,?)",
                     (z, x, (1 << z) - 1 - y, gzip.compress(raw, mtime=0)),
                 )
-
                 zoom_counts[z] = zoom_counts.get(z, 0) + 1
-                raw_bytes += len(raw)
 
     zooms = sorted(zoom_counts)
     metadata = {
@@ -130,7 +107,7 @@ def main(argv: list[str]) -> None:
     db.commit()
     db.close()
 
-    print(f"  {len(seen)} tiles, {raw_bytes / 1_000_000:.1f} MB uncompressed")
+    print(f"  {len(seen)} basemap tiles")
     print("  per zoom: " + " ".join(f"z{z}={zoom_counts[z]}" for z in zooms))
 
 

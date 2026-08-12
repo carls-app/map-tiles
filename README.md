@@ -12,20 +12,62 @@ preview map you can pan around to check a build.
 
 ## What this is, and what it is not
 
-This repo produces the map that renders *underneath* the app's own content:
-streets, water, landuse, building footprints, labels. That is all.
+An OpenStreetMap basemap — streets, water, landuse, building footprints, labels
+— plus two layers of Carleton's own campus data joined into the same tileset.
 
-**Campus building data is not here and must not be added here.** AAO fetches
-building polygons from ccc-server at
+**It is still not the campus dataset.** The two campus layers here carry a
+footprint, a label anchor, a name and a `buildingId`, and nothing else. Room
+data, departments, offices, hours, photos and prose all stay in ccc-server at
 `carleton.api.frogpond.tech/v1/map/geojson`, downstream of
-[`carls-app/map-data`][map-data], and draws them on top of this basemap. If you
-came here looking for building outlines, room data or campus geometry, you want
-that repo, not this one.
+[`carls-app/map-data`][map-data], which the app fetches directly. This repo
+copies the two fields a *map* needs and leaves the record alone.
 
 [map-data]: https://github.com/carls-app/map-data
 
-The cartography is deliberately quiet for that reason — see
-[Cartography](#cartography) below.
+The cartography is deliberately quiet — the app draws its own selection
+highlight on top of these layers. See [Cartography](#cartography) below.
+
+## Carleton's campus layers
+
+Built from the live endpoint, not [`carls-app/map-data`][map-data]'s
+`map.geojson`, which is the same data frozen in 2018.
+
+| Layer | Geometry | Zooms | Features | Properties |
+| --- | --- | --- | ---: | --- |
+| `campus_buildings` | MultiPolygon | z14+ | 96 | `buildingId`, `name`, `category` |
+| `campus_building_labels` | Point | z15+ | 124 | `buildingId`, `name`, `category`, `hasFootprint` |
+
+`buildingId` is the source feature's `id` and is on **both** layers — the app
+keys its selection highlight off it, so it has to survive tiling.
+
+Three things about the source shape drive `scripts/campus-layers.py`:
+
+- Each feature is a **`GeometryCollection`** holding the polygon(s) and a point.
+  Neither tippecanoe nor MapLibre supports that — it is valid GeoJSON that the
+  style spec does not cover — and both fail *silently*, so it is unwrapped
+  before tiling.
+- A building with wings arrives as several polygons, merged here into one
+  `MultiPolygon` so it highlights and hit-tests as a single building. (No
+  feature in the current data actually has more than one polygon; the merge is
+  what stops that from silently becoming several features if one gains a wing.)
+- The points are **hand-placed label anchors, not centroids** — that is what
+  `map-data`'s `overrides.yaml` exists to correct. They ship as their own layer
+  rather than letting the renderer derive a position from the polygon.
+
+Only 96 of the 124 features have a footprint. The other 28 are places, not
+buildings — the Bald Spot, Lyman Lakes, the parking lots, the wind turbine.
+They still get a label; `hasFootprint` is false so the app knows there is no
+polygon to highlight.
+
+Nothing is dropped at any stage: tippecanoe runs with `--no-feature-limit`,
+`--no-tile-size-limit` and `--drop-rate=1`, emphatically not
+`--drop-densest-as-needed`, and `campus-layers.py` fails the build if any source
+feature reaches neither layer.
+
+The two layers are merged into the basemap with `tile-join`, so the app consumes
+one `campus.pmtiles` and one `tiles/{z}/{x}/{y}.pbf` tree. The exploded tree is
+regenerated from the joined archive, so both published forms are the same
+tileset by construction.
 
 ## Using it from AAO
 
@@ -151,11 +193,14 @@ Measured on the 2026-08-12 build:
 
 | | Size | Files |
 | --- | ---: | ---: |
-| `campus.pmtiles` | 6,330,768 B (6.0 MiB) | 1 |
-| `tiles/**/*.pbf` | 8,515,967 B (8.1 MiB) | 985 |
+| `campus.pmtiles` | 6,399,990 B (6.1 MiB) | 1 |
+| `tiles/**/*.pbf` | 8,543,202 B (8.1 MiB) | 985 |
 | `fonts/**/*.pbf` | 11,083,630 B (10.6 MiB) | 768 |
 | `sprites/` | 52,154 B | 4 |
-| **site total** | **26,522,869 B (25.3 MiB)** | **1,763** |
+| **site total** | **26,695,145 B (25.5 MiB)** | **1,764** |
+
+Carleton's two campus layers cost **+69,222 B (+1.1%)** on the archive — 96
+footprints and 124 label points over z14–z15.
 
 Tiles per zoom:
 
@@ -257,11 +302,54 @@ from stock:
 
 These live in one `flavor` object at the top of `scripts/make-style.mjs`.
 
+### The two building layers
+
+Carleton's footprints and OSM's overlap on campus, and the two datasets disagree
+about outlines. Comparing them, **OSM's are generally the more accurate** — it
+picks up wings and extensions Carleton's polygons miss — so `campus_buildings`
+is not trying to overrule them. It exists for the `buildingId` and for the app
+to hit-test taps against.
+
+Both layers are therefore painted **opaque, in the same colour**, which is the
+only arrangement in which two overlapping fills union cleanly. The stock
+Protomaps buildings layer is half-transparent; leaving it that way and matching
+it means the overlap composites twice and lands four values per channel darker
+than either layer alone. That is a small number and a very visible one — the eye
+reads a low-contrast step on a flat field as an edge, so every building where
+the two disagree grows a doubled outline: a lighter fringe around a darker core.
+
+Two opaque layers in one colour cannot do that. Overlap, OSM-only and
+campus-only all resolve to the same pixel, and a disagreement reads as one
+slightly larger building. The colour is the stock fill flattened against the
+earth beneath it, computed rather than hardcoded, so the map keeps the
+appearance it had and stays right if the flavor changes.
+
+`OSM_BUILDINGS` in `build.sh` controls the OSM layer:
+
+| | |
+| --- | --- |
+| `full` | draw it normally — the default |
+| `ghost` | fade it from `CAMPUS_BUILDINGS_MINZOOM` so only Carleton's read |
+| `off` | omit it entirely |
+
+With the doubling fixed, `off` is a **performance** lever rather than a
+cartographic one: buildings are the densest polygons on the map, and at z17 over
+campus the renderer draws every OSM footprint plus every Carleton one. Dropping
+the OSM layer roughly halves that without touching `campus_buildings`, which the
+app taps against and which therefore cannot be hidden.
+
 ## Building locally
 
-Needs `bash`, `curl`, `git`, `python3` (3.9+) and `node` (20+). Everything else —
-the `pmtiles` CLI, the Python library, the font and sprite assets — is fetched
-and pinned by the script.
+Needs `bash`, `curl`, `git`, `python3` (3.9+), `node` (20+) and **tippecanoe**
+(which supplies `tile-join`):
+
+```console
+$ sudo apt-get install -y tippecanoe     # Debian/Ubuntu
+$ brew install tippecanoe                # macOS
+```
+
+Everything else — the `pmtiles` CLI, the Python library, the font and sprite
+assets — is fetched and pinned by the script.
 
 ```console
 $ ./build.sh
@@ -359,11 +447,22 @@ recorded in the style is the one that generated it.
 
 ## Attribution
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
-licensed under the [ODbL](https://opendatacommons.org/licenses/odbl/). The
-attribution is set in both style JSONs' source `attribution` field and must stay
-there — MapLibre surfaces it in the map's attribution control, and it is a
-license requirement, not a nicety.
+Two separate sources, credited separately:
+
+- **Basemap** — map data © [OpenStreetMap
+  contributors](https://www.openstreetmap.org/copyright), licensed under the
+  [ODbL](https://opendatacommons.org/licenses/odbl/).
+- **`campus_buildings` and `campus_building_labels`** — © [Carleton
+  College](https://www.carleton.edu/). This is Carleton's data, not
+  OpenStreetMap's, and must not be presented as the latter.
+
+Both appear in each style JSON's source `attribution` field and must stay there
+— MapLibre surfaces it in the map's attribution control, and the OSM half is a
+license requirement, not a nicety:
+
+```
+© OpenStreetMap contributors | Carleton College
+```
 
 Fonts are Noto Sans, under the [SIL Open Font License](https://carls-app.github.io/map-tiles/fonts/OFL.txt).
 Basemap style and sprites are from [Protomaps](https://github.com/protomaps/basemaps)

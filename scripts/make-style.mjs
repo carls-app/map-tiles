@@ -89,8 +89,158 @@ const flavor = {
 
 const styleLayers = layers("basemap", flavor, { lang: "en" });
 
-const ATTRIBUTION =
-  '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>';
+// ---------------------------------------------------------------------------
+// Carleton's campus layers
+// ---------------------------------------------------------------------------
+//
+// These ride in the same source as the basemap — tile-join merged them into one
+// tileset — so they are separate `source-layer`s, not a separate source.
+//
+// The polygons and the label points are two layers rather than one because the
+// points are hand-placed anchors, not centroids. Letting the renderer derive a
+// position from the polygon would throw away the tuning that
+// carls-app/map-data's overrides.yaml exists to capture.
+
+const CAMPUS_BUILDINGS_MINZOOM = Number(env("CAMPUS_BUILDINGS_MINZOOM"));
+const CAMPUS_LABELS_MINZOOM = Number(env("CAMPUS_LABELS_MINZOOM"));
+const OSM_BUILDINGS = env("OSM_BUILDINGS");
+
+// Quiet on purpose: the app draws its own selection highlight on top of these,
+// and a loud base layer would fight it.
+//
+// The fill is the *same* colour as the basemap's own buildings, and carries no
+// outline, which is what keeps the two datasets from arguing. OSM's outlines
+// are generally the more accurate of the two — comparing them over campus, OSM
+// picks up wings and extensions that Carleton's polygons miss — so this layer
+// is not trying to overrule them. Painted in the same grey with no edge, the
+// overlap is invisible and a disagreement reads as one slightly larger
+// building rather than a doubled, misregistered outline.
+//
+// It still has to be *drawn*: the app hit-tests taps against this layer's
+// rendered geometry to resolve a buildingId, so it cannot be hidden.
+//
+// Both building layers are painted **opaque, in the same colour**, and that is
+// the whole trick. The stock Protomaps layer is half-transparent; leaving it
+// that way and matching it means the overlap composites twice and lands about
+// four values per channel darker than either layer alone. That is a small
+// number and a very visible one — the eye reads a low-contrast step on a flat
+// field as an edge, so every building where the two datasets disagree grows a
+// doubled outline: a lighter fringe around a darker core.
+//
+// Two opaque layers in one colour cannot do that. Overlap, OSM-only and
+// campus-only all resolve to the same pixel, so a disagreement reads as one
+// slightly larger building instead of two misregistered ones.
+//
+// The colour is the stock fill flattened against the earth beneath it, so the
+// map keeps the appearance it had before — computed rather than hardcoded, so
+// it stays right if the flavor changes.
+const stockBuildings = styleLayers.find((l) => l.id === "buildings");
+if (!stockBuildings) throw new Error("expected a basemap layer called buildings");
+
+const flatten = (fg, bg, alpha) => {
+  const parse = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  if (typeof alpha !== "number") return fg; // an expression: leave it be
+  const [fr, fg_, fb] = parse(fg);
+  const [br, bg_, bb] = parse(bg);
+  const mix = (f, b) => Math.round(b * (1 - alpha) + f * alpha);
+  return "#" + [mix(fr, br), mix(fg_, bg_), mix(fb, bb)].map((v) => v.toString(16).padStart(2, "0")).join("");
+};
+
+const BUILDING_FILL = flatten(
+  stockBuildings.paint["fill-color"],
+  flavor.earth,
+  stockBuildings.paint["fill-opacity"],
+);
+const BUILDING_PAINT = { "fill-color": BUILDING_FILL, "fill-opacity": 1 };
+
+const campusLayers = [
+  {
+    id: "campus_buildings",
+    type: "fill",
+    source: "basemap",
+    "source-layer": "campus_buildings",
+    minzoom: CAMPUS_BUILDINGS_MINZOOM,
+    paint: { ...BUILDING_PAINT },
+  },
+  {
+    id: "campus_building_labels",
+    type: "symbol",
+    source: "basemap",
+    "source-layer": "campus_building_labels",
+    minzoom: CAMPUS_LABELS_MINZOOM,
+    layout: {
+      "text-field": ["get", "name"],
+      // Must name a stack the site actually hosts under `glyphs`. A stack that
+      // is not there renders no labels and reports nothing; build.sh checks it.
+      "text-font": ["Noto Sans Medium"],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 15, 10, 18, 13],
+      "text-anchor": "center",
+      "text-max-width": 8,
+      "text-padding": 2,
+    },
+    paint: {
+      "text-color": "#4f4b45",
+      "text-halo-color": "#f0eeea",
+      "text-halo-width": 1.2,
+    },
+  },
+];
+
+// Where they go: above the basemap's own buildings, below its street labels.
+// Found by layer id rather than index, so an upstream reshuffle of the
+// Protomaps layer list cannot silently put them somewhere else.
+const insertAfter = (id) => {
+  const i = styleLayers.findIndex((l) => l.id === id);
+  if (i < 0) throw new Error(`expected a basemap layer called ${id}`);
+  return i + 1;
+};
+const insertBefore = (id) => {
+  const i = styleLayers.findIndex((l) => l.id === id);
+  if (i < 0) throw new Error(`expected a basemap layer called ${id}`);
+  return i;
+};
+
+// The label layer goes in first, at the higher index, so inserting the fill
+// below it does not shift the position that was just computed.
+styleLayers.splice(insertBefore("address_label"), 0, campusLayers[1]);
+styleLayers.splice(insertAfter("buildings"), 0, campusLayers[0]);
+
+// How much of the basemap's own OSM building layer to draw. Since the campus
+// fill matches it exactly, "full" is the default and the two datasets simply
+// union — OSM keeps its better outlines, and downtown Northfield, which has no
+// campus data at all, keeps its buildings.
+//
+// The other two settings exist because these are the densest polygons on the
+// map: at z17 over campus the renderer is drawing every OSM footprint plus
+// every Carleton one. If that turns out to cost too much on device, dropping
+// the OSM layer roughly halves the building geometry without touching the
+// campus layer the app taps against.
+const osmBuildingsIndex = styleLayers.findIndex((l) => l.id === "buildings");
+stockBuildings.paint = { ...BUILDING_PAINT };
+if (OSM_BUILDINGS === "off") {
+  styleLayers.splice(osmBuildingsIndex, 1);
+} else if (OSM_BUILDINGS === "ghost") {
+  const osmBuildings = styleLayers[osmBuildingsIndex];
+  osmBuildings.paint = {
+    ...osmBuildings.paint,
+    "fill-opacity": [
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      CAMPUS_BUILDINGS_MINZOOM - 1, 1,
+      CAMPUS_BUILDINGS_MINZOOM + 1, 0.3,
+    ],
+  };
+} else if (OSM_BUILDINGS !== "full") {
+  throw new Error(`OSM_BUILDINGS must be one of full, ghost, off — got "${OSM_BUILDINGS}"`);
+}
+
+const ATTRIBUTION = [
+  '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>',
+  // Carleton's building data is Carleton's, not OpenStreetMap's, and is
+  // credited separately for that reason.
+  '<a href="https://www.carleton.edu/" target="_blank">Carleton College</a>',
+].join(" | ");
 
 const base = {
   version: 8,
@@ -99,9 +249,12 @@ const base = {
     "aao:generated-by": "carls-app/map-tiles",
     "aao:schema": "protomaps basemap v4",
     "aao:style-package": `@protomaps/basemaps@${basemapsVersion}`,
+    "aao:campus-layers": "campus_buildings, campus_building_labels",
+    "aao:osm-buildings": OSM_BUILDINGS,
     "aao:note":
-      "Basemap only. Campus building polygons come from ccc-server " +
-      "(carleton.api.frogpond.tech/v1/map/geojson) and are drawn by the app on top of this.",
+      "OSM basemap plus Carleton's own building footprints and label anchors, from " +
+      "carleton.api.frogpond.tech/v1/map/geojson. Both campus layers carry buildingId. " +
+      "The app draws its selection highlight on top of these.",
   },
   center: CENTER,
   zoom: CENTER_ZOOM,
@@ -157,6 +310,7 @@ writeFileSync(
   ) + "\n",
 );
 
+console.log(`  campus layers       campus_buildings (z${CAMPUS_BUILDINGS_MINZOOM}+), campus_building_labels (z${CAMPUS_LABELS_MINZOOM}+), OSM buildings: ${OSM_BUILDINGS}`);
 console.log(`  style.json          ${styleLayers.length} layers, tiles/{z}/{x}/{y}.pbf, z${MINZOOM}-z${MAXZOOM} (overzoom to z${STYLE_MAXZOOM})`);
 console.log(`  style-pmtiles.json  ${styleLayers.length} layers, pmtiles://${SITE_URL}/campus.pmtiles`);
 

@@ -33,6 +33,34 @@ MINZOOM=0
 MAXZOOM=15
 STYLE_MAXZOOM=18
 
+# Carleton's own building data, joined into the tileset as two extra layers on
+# top of the OSM basemap. This is Carleton's, not OpenStreetMap's, and is
+# credited separately in the styles.
+#
+# Prefer the live endpoint over carls-app/map-data's map.geojson, which is the
+# same data frozen in 2018.
+CAMPUS_GEOJSON_URL="https://carleton.api.frogpond.tech/v1/map/geojson"
+
+# Footprints only need to exist where they are legible, and the labels a zoom
+# later so they do not pile up on top of each other.
+CAMPUS_BUILDINGS_MINZOOM=14
+CAMPUS_LABELS_MINZOOM=15
+
+# What to do with the basemap's own OSM building footprints, which overlap
+# Carleton's over campus. OSM's outlines are generally the more accurate of the
+# two, so the campus layer is painted in the same grey with no outline and the
+# two simply union — no doubled edge, and downtown Northfield (which has no
+# campus data) keeps its buildings.
+#
+#   full   draw them normally — the default
+#   ghost  fade them from CAMPUS_BUILDINGS_MINZOOM so only Carleton's read
+#   off    omit the layer entirely
+#
+# `off` is the escape hatch if building polygons turn out to be a rendering
+# cost on device: it roughly halves the polygon count over campus without
+# touching the campus layer, which the app hit-tests taps against.
+OSM_BUILDINGS="full"
+
 # The extract is graduated: the whole region down to street level, then only the
 # campus area for the zooms where tiles get expensive. Going one zoom deeper
 # across the whole region costs more than the entire rest of the pyramid
@@ -160,6 +188,19 @@ fi
 "$VENV/bin/pip" install --quiet "pmtiles==${PMTILES_PY_VERSION}"
 PYTHON="$VENV/bin/python"
 
+# tippecanoe tiles the campus layers and tile-join merges them into the basemap.
+# Unlike the rest of the toolchain it is not fetched here — it is a C++ build,
+# and every platform already packages it.
+for tool in tippecanoe tile-join; do
+  command -v "$tool" >/dev/null || {
+    echo "ERROR: $tool not found. Install tippecanoe:" >&2
+    echo "  Debian/Ubuntu: sudo apt-get install -y tippecanoe" >&2
+    echo "  macOS:         brew install tippecanoe" >&2
+    exit 1
+  }
+done
+tippecanoe --version 2>&1 | head -1
+
 # --- 2. find a planet build ------------------------------------------------
 
 log "Locating a Protomaps daily build"
@@ -203,20 +244,60 @@ for tier in "${TIERS[@]}"; do
   TIER_FILES+=("$f")
 done
 
-# --- 4. merge into both published forms ------------------------------------
+# --- 4. merge the tiers ----------------------------------------------------
 
-log "Assembling tiles/{z}/{x}/{y}.pbf and the PMTiles archive"
+log "Merging the basemap tiers"
 
 "$PYTHON" "$ROOT/scripts/assemble.py" \
-  "$DIST/tiles" "$WORK/campus.mbtiles" \
+  "$WORK/basemap.mbtiles" \
   "$DATA_BOUNDS" "$CENTER_LON" "$CENTER_LAT" "$CENTER_ZOOM" \
   "${TIER_FILES[@]}"
 
-"$PMTILES" convert "$WORK/campus.mbtiles" "$DIST/campus.pmtiles" --tmpdir="$WORK" 2>&1 | sed 's/^/  /'
+# --- 5. Carleton's campus layers -------------------------------------------
+
+log "Building the campus layers"
+
+curl -fsSL -o "$WORK/campus-source.geojson" "$CAMPUS_GEOJSON_URL"
+echo "  fetched $(wc -c < "$WORK/campus-source.geojson" | tr -d ' ') bytes from $CAMPUS_GEOJSON_URL"
+
+"$PYTHON" "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
+
+# Nothing may be dropped: there are barely a hundred features and every one of
+# them is a place someone might be trying to find. Hence --no-feature-limit and
+# --no-tile-size-limit, and emphatically not --drop-densest-as-needed. Points
+# are also dropped by default below the base zoom, which --drop-rate=1 disables.
+tippecanoe -q -f -o "$WORK/campus_buildings.mbtiles" \
+  --layer=campus_buildings \
+  --minimum-zoom="$CAMPUS_BUILDINGS_MINZOOM" --maximum-zoom="$MAXZOOM" \
+  --no-feature-limit --no-tile-size-limit --no-tiny-polygon-reduction \
+  "$WORK/campus_buildings.geojson"
+
+tippecanoe -q -f -o "$WORK/campus_building_labels.mbtiles" \
+  --layer=campus_building_labels \
+  --minimum-zoom="$CAMPUS_LABELS_MINZOOM" --maximum-zoom="$MAXZOOM" \
+  --no-feature-limit --no-tile-size-limit --drop-rate=1 \
+  "$WORK/campus_building_labels.geojson"
+
+# --- 6. join into both published forms -------------------------------------
+
+log "Joining campus layers into the basemap and converting"
+
+# One archive and one tile tree for the app, rather than two sources to juggle.
+tile-join -f -pk -o "$WORK/joined.mbtiles" \
+  "$WORK/basemap.mbtiles" \
+  "$WORK/campus_buildings.mbtiles" \
+  "$WORK/campus_building_labels.mbtiles" >/dev/null
+
+"$PMTILES" convert "$WORK/joined.mbtiles" "$DIST/campus.pmtiles" --tmpdir="$WORK" 2>&1 | sed 's/^/  /'
 "$PMTILES" verify "$DIST/campus.pmtiles"
 "$PMTILES" show "$DIST/campus.pmtiles" | grep -E 'zoom|bounds|tile type|compression|count' | sed 's/^/  /'
 
-# --- 5. glyphs and sprites -------------------------------------------------
+# The exploded tree comes from the joined archive, so the two published forms
+# are the same tileset by construction.
+log "Exploding to tiles/{z}/{x}/{y}.pbf (uncompressed)"
+"$PYTHON" "$ROOT/scripts/explode.py" "$DIST/campus.pmtiles" "$DIST/tiles"
+
+# --- 7. glyphs and sprites -------------------------------------------------
 #
 # A style that names a font or icon it cannot fetch renders without labels
 # instead of erroring, so these are self-hosted alongside the tiles.
@@ -252,7 +333,7 @@ cp "$ASSETS/sprites/v4/light.png"      "$DIST/sprites/sprite.png"
 cp "$ASSETS/sprites/v4/light@2x.json"  "$DIST/sprites/sprite@2x.json"
 cp "$ASSETS/sprites/v4/light@2x.png"   "$DIST/sprites/sprite@2x.png"
 
-# --- 6. styles -------------------------------------------------------------
+# --- 8. styles -------------------------------------------------------------
 
 log "Generating styles"
 
@@ -264,6 +345,9 @@ MINZOOM="$MINZOOM" \
 MAXZOOM="$MAXZOOM" \
 STYLE_MAXZOOM="$STYLE_MAXZOOM" \
 CENTER_LON="$CENTER_LON" CENTER_LAT="$CENTER_LAT" CENTER_ZOOM="$CENTER_ZOOM" \
+CAMPUS_BUILDINGS_MINZOOM="$CAMPUS_BUILDINGS_MINZOOM" \
+CAMPUS_LABELS_MINZOOM="$CAMPUS_LABELS_MINZOOM" \
+OSM_BUILDINGS="$OSM_BUILDINGS" \
   node "$ROOT/scripts/make-style.mjs" "$DIST"
 
 cp "$ROOT/site/index.html" "$DIST/index.html"
@@ -274,7 +358,7 @@ cp "$ROOT/site/.nojekyll" "$DIST/.nojekyll"
 # miserable to debug on device.
 "$PYTHON" "$ROOT/scripts/verify.py" "$DIST"
 
-# --- 7. report -------------------------------------------------------------
+# --- 9. report -------------------------------------------------------------
 
 log "Output"
 
