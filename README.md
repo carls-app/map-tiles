@@ -1,8 +1,9 @@
 # map-tiles
 
-Vector basemap tiles for [All About Olaf][aao], covering St. Olaf, Carleton and
-the town of Northfield between them. Built from OpenStreetMap, published to
-GitHub Pages.
+Vector basemap tiles for [All About Olaf][aao]. Full detail over St. Olaf,
+Carleton and the town of Northfield between them, with street-level coverage out
+to Apple Valley in the north and Faribault in the south. Built from
+OpenStreetMap, published to GitHub Pages.
 
 **Live at <https://carls-app.github.io/map-tiles/>** — that page is also a
 preview map you can pan around to check a build.
@@ -97,23 +98,52 @@ and at that zoom it carries full-resolution building footprints and footpaths;
 vector overzoom keeps them crisp because the geometry is scaled, not the pixels.
 Rendering at z18 looks the same as native z18 tiles would.
 
-The extract is **graduated**, not a single bounding box across all zooms:
+## Area covered
 
-| Zooms | Bounding box | Why |
+Two bounding boxes, both at the top of `build.sh`:
+
+| | Box | Extent |
 | --- | --- | --- |
-| z0–z8 | `-97.9,42.4,-88.4,49.6` | Upper Midwest. Pinching out shows Minneapolis and I-35, not a void. |
-| z9–z12 | `-93.55,44.30,-92.80,44.75` | Northfield and its approach roads. |
-| z13–z14 | `-93.28,44.38,-93.05,44.55` | Town and immediate surroundings. |
-| z15 | `-93.20,44.44,-93.12,44.49` | Campus detail. |
+| `REGION_BBOX` | `-93.50,44.28,-92.84,44.75` | ~52 km square: Apple Valley in the north, Faribault in the south, the same distance east and west |
+| `CAMPUS_BBOX` | `-93.28,44.38,-93.05,44.55` | Both campuses, downtown Northfield and Dundas, with room to pan |
 
-The naive alternative — one campus-sized bbox at every zoom — was tried first
-and looks broken. Below about z10 a single tile covers the entire bounding box,
-so the map becomes one lonely rectangle of data with a hard edge all around it.
-The pyramid above costs a few megabytes and fixes it completely.
+The extract is **graduated** rather than one box across all zooms:
 
-The source's `bounds` is the **widest** tier, for the same reason: MapLibre culls
-tiles outside a source's declared bounds, so narrowing it to the campus bbox
-would suppress every low-zoom context tile and undo the tiers.
+| Zooms | Box | Why |
+| --- | --- | --- |
+| z0–z13 | `REGION_BBOX` | The whole region, down to street level. |
+| z14–z15 | `CAMPUS_BBOX` | Building footprints and footpaths, where the app actually operates. |
+
+The split is where it is because one more zoom of the full region costs more than
+everything else combined — z14 over `REGION_BBOX` alone measures 4.4 MB and 961
+tiles — and nothing in a campus wayfinding app needs building footprints in
+Faribault.
+
+The source's `bounds` is the **union** of the tiers, computed at build time.
+MapLibre culls tiles outside a source's declared bounds, so hardcoding it
+narrower than the data would suppress tiles that had already been paid for.
+
+### If you pinch out past the region
+
+Below z9 each zoom is a single tile, and a tile at those zooms covers far more
+than the region does — the z7 tile spans Minneapolis to central Iowa. So zooming
+out shows more context, not less, right down to the whole world at z0.
+
+What you *can* see, on a wide viewport, is the edge of that tile. On a phone it
+is not reachable: one 512 px tile more than fills a ~390 pt screen at any zoom.
+On an iPad in landscape, or when panning hard, the boundary shows.
+
+Padding the low zooms fixes it and costs real money: a ±1° pad on z0–z9 measured
+**+1.3 MB** against a 6.0 MiB archive. It is deliberately not enabled. To turn it
+on, add a tier above the others and let the others start at z10:
+
+```bash
+TIERS=(
+  "0:9:-94.2,43.5,-92.2,45.5"   # low-zoom padding
+  "10:13:$REGION_BBOX"
+  "14:15:$CAMPUS_BBOX"
+)
+```
 
 ## Output sizes
 
@@ -121,25 +151,25 @@ Measured on the 2026-08-12 build:
 
 | | Size | Files |
 | --- | ---: | ---: |
-| `campus.pmtiles` | 9,790,896 B (9.3 MiB) | 1 |
-| `tiles/**/*.pbf` | 13,911,459 B (13.3 MiB) | 485 |
+| `campus.pmtiles` | 6,330,768 B (6.0 MiB) | 1 |
+| `tiles/**/*.pbf` | 8,515,967 B (8.1 MiB) | 985 |
 | `fonts/**/*.pbf` | 11,083,630 B (10.6 MiB) | 768 |
 | `sprites/` | 52,154 B | 4 |
-| **site total** | **35,378,483 B (33.7 MiB)** | **1,263** |
+| **site total** | **26,522,869 B (25.3 MiB)** | **1,763** |
 
 Tiles per zoom:
 
 ```
-z0=1  z1=1  z2=2  z3=2   z4=2   z5=4    z6=9   z7=20
-z8=64 z9=6  z10=12 z11=30 z12=80 z13=36 z14=144 z15=72
+z0=1   z1=1   z2=1   z3=1   z4=1    z5=1    z6=1     z7=1
+z8=1   z9=2   z10=6  z11=20 z12=64  z13=256 z14=144  z15=484
 ```
 
 For comparison, [`carls-app/map-data`][map-data] holds a **raster** tileset over
-roughly the same area at z12–z19: 2,677 PNGs, ~38 MB. The vector tileset here is
-9.3 MiB as a PMTiles archive — about a quarter of that — while covering far more
-ground at low zoom.
+roughly this area at z12–z19: 2,677 PNGs, ~38 MB. The vector tileset here is
+6.0 MiB as a PMTiles archive — about a sixth of that — while also covering z0–z11,
+which the raster set does not.
 
-The exploded tree is larger than the archive (13.3 MiB vs 9.3 MiB) because those
+The exploded tree is larger than the archive (8.1 MiB vs 6.0 MiB) because those
 tiles are stored **uncompressed**; see [GitHub Pages
 constraints](#github-pages-constraints).
 
@@ -154,8 +184,8 @@ all the way out, and a missing glyph range fails silently.
 
 These are the ones that actually bite:
 
-- **100 MB hard per-file limit.** `campus.pmtiles` is 9.3 MiB, so there is
-  roughly 10× headroom. `build.sh` fails the build if it ever crosses the line
+- **100 MB hard per-file limit.** `campus.pmtiles` is 6.0 MiB, so there is
+  roughly 16× headroom. `build.sh` fails the build if it ever crosses the line
   rather than letting it break at request time.
 - **Git LFS does not work on Pages.** Pages serves the LFS *pointer file*, not
   the object. If the archive ever outgrows 100 MB, move it to a GitHub Release
@@ -257,12 +287,13 @@ while working fine on Pages.)
 
 ### Changing the bbox or zooms
 
-Everything tunable is in one block at the top of `build.sh`: `BBOX`, `MINZOOM`,
-`MAXZOOM`, `STYLE_MAXZOOM` and the `TIERS` array.
+Everything tunable is in one block at the top of `build.sh`: `REGION_BBOX`,
+`CAMPUS_BBOX`, `MINZOOM`, `MAXZOOM`, `STYLE_MAXZOOM` and the `TIERS` array.
 
-If you widen the area, change `TIERS` — that is what actually drives extraction.
-The data extent written into the styles is the union of the tiers, computed at
-build time, so there is no second place to keep in sync.
+Editing the two boxes is usually enough, since `TIERS` refers to them. If you
+need a different zoom split, edit `TIERS` — that is what actually drives
+extraction. The data extent written into the styles is the union of the tiers,
+computed at build time, so there is no second place to keep in sync.
 
 The build refuses to start if the tiers leave a zoom gap, overlap, stop short of
 `MAXZOOM`, or contain a bbox that is not `west,south,east,north` — all of which

@@ -15,9 +15,16 @@ set -euo pipefail
 # Configuration — change these and nothing else.
 # ---------------------------------------------------------------------------
 
-# The area the app actually cares about: St. Olaf, Carleton, and the town of
-# Northfield between them. west,south,east,north
-BBOX="-93.20,44.44,-93.12,44.49"
+# Two areas, in west,south,east,north order.
+#
+# The region worth having at all: Northfield, reaching Apple Valley in the north
+# and Faribault in the south, with the same distance east and west. About 52 km
+# square.
+REGION_BBOX="-93.50,44.28,-92.84,44.75"
+
+# Where the app actually spends its time: both campuses, downtown Northfield and
+# Dundas, with room to pan. This is the part that gets high-zoom detail.
+CAMPUS_BBOX="-93.28,44.38,-93.05,44.55"
 
 # Zoom range. The Protomaps planet build tops out at z15, so MAXZOOM cannot
 # usefully exceed that; the style overzooms z15 tiles the rest of the way to
@@ -26,22 +33,17 @@ MINZOOM=0
 MAXZOOM=15
 STYLE_MAXZOOM=18
 
-# Extracting BBOX alone across every zoom looks broken when you pinch out: below
-# about z10 a single tile covers the whole bounding box, so the map becomes one
-# lonely rectangle floating in background colour with a hard edge all around it.
+# The extract is graduated: the whole region down to street level, then only the
+# campus area for the zooms where tiles get expensive. Going one zoom deeper
+# across the whole region costs more than the entire rest of the pyramid
+# (measured: z14 over REGION_BBOX is 4.4 MB and 961 tiles on its own), and
+# nothing in a campus wayfinding app needs building footprints in Faribault.
 #
-# So the extract is graduated. Each tier is "minzoom:maxzoom:bbox", widest at the
-# bottom, tightening as the zoom climbs and tiles get expensive. The tiers are
-# merged into one tileset afterwards. Measured cost of the whole pyramid is a
-# few megabytes — see README ("Output sizes").
-#
-# Keep the tiers contiguous and covering MINZOOM..MAXZOOM. The last tier should
-# be BBOX itself.
+# Each tier is "minzoom:maxzoom:bbox". They must be contiguous and cover
+# MINZOOM..MAXZOOM; the build checks that and refuses to start otherwise.
 TIERS=(
-  "0:8:-97.9,42.4,-88.4,49.6"        # upper midwest — context when fully zoomed out
-  "9:12:-93.55,44.30,-92.80,44.75"   # Northfield and its approach roads
-  "13:14:-93.28,44.38,-93.05,44.55"  # town and immediate surroundings
-  "15:15:$BBOX"                      # campus detail
+  "0:13:$REGION_BBOX"   # whole region, down to street level
+  "14:15:$CAMPUS_BBOX"  # campuses, Northfield and Dundas, in full detail
 )
 
 # Where the built site is served from. Written into the styles as absolute URLs,
