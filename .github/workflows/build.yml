@@ -1,0 +1,119 @@
+name: Build and publish basemap
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monthly, on the 3rd at 07:00 UTC. OSM data for a college town does not
+    # move fast, and the Protomaps daily builds this pulls from are only
+    # retained for about a week, so there is nothing to gain from running more
+    # often — but the build must run often enough that a stale pin gets noticed.
+    - cron: "0 7 3 * *"
+
+# Required to force-push the built site to gh-pages.
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-basemap
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Check the tiles are not gzipped
+        # Pages will not set Content-Encoding on a .pbf, so a gzipped tile would
+        # reach the app as garbage. This is the failure that is hardest to spot
+        # on device, so it is worth asserting in CI rather than trusting.
+        run: |
+          bad=0
+          while IFS= read -r f; do
+            if [ "$(head -c 2 "$f" | od -An -tx1 | tr -d ' \n')" = "1f8b" ]; then
+              echo "gzipped tile: $f"
+              bad=1
+            fi
+          done < <(find dist/tiles -name '*.pbf')
+          [ "$bad" = 0 ] || exit 1
+          echo "OK: $(find dist/tiles -name '*.pbf' | wc -l) tiles stored uncompressed"
+
+      - name: Check the styles resolve against the built site
+        # A style naming a font, sprite or tile path the build did not produce
+        # renders as a map with no labels and no error, which is miserable to
+        # debug on device. Cheaper to catch here.
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, re
+          site = "https://carls-app.github.io/map-tiles"
+          missing = []
+          for name in ("style.json", "style-pmtiles.json"):
+              s = json.load(open(f"dist/{name}"))
+              # glyphs: check the Latin range of every named fontstack
+              stacks = set()
+              def walk(v):
+                  if isinstance(v, list): [walk(i) for i in v]
+                  elif isinstance(v, dict): [walk(i) for i in v.values()]
+                  elif isinstance(v, str) and v.startswith("Noto Sans"): stacks.add(v)
+              for layer in s["layers"]:
+                  walk(layer.get("layout", {}).get("text-font", []))
+              for stack in stacks:
+                  p = s["glyphs"].replace(site, "dist").replace("{fontstack}", stack).replace("{range}", "0-255")
+                  if not os.path.exists(p): missing.append(f"{name}: {p}")
+              for suffix in (".json", ".png", "@2x.json", "@2x.png"):
+                  p = s["sprite"].replace(site, "dist") + suffix
+                  if not os.path.exists(p): missing.append(f"{name}: {p}")
+              if not s.get("layers"): missing.append(f"{name}: no layers")
+              for src in s["sources"].values():
+                  if "attribution" not in src: missing.append(f"{name}: source missing attribution")
+          if missing:
+              print("\n".join(missing)); sys.exit(1)
+          print("OK: styles resolve, fonts and sprites present, attribution set")
+          PY
+
+      - name: Publish to gh-pages
+        # Force-push a single fresh commit. This branch is entirely owned by this
+        # workflow and there is nothing on it to preserve; without the force-push
+        # every rebuild would add another multi-megabyte blob to history forever.
+        run: |
+          cd dist
+          git init --quiet -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "Build basemap from ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d))"
+          git push --force --quiet \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            gh-pages
+          echo "Published $(find . -type f | wc -l) files to gh-pages"
+
+      - name: Verify the published site
+        # GitHub Pages takes a moment to pick up the push. Range support in
+        # particular is the thing style-pmtiles.json depends on, so check it
+        # rather than assume it.
+        run: |
+          base="https://carls-app.github.io/map-tiles"
+          for i in $(seq 1 20); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/style.json" || true)
+            [ "$code" = "200" ] && break
+            echo "waiting for Pages ($i): $code"; sleep 30
+          done
+          echo "--- style.json";  curl -sS -o /dev/null -w '%{http_code}\n' "$base/style.json"
+          echo "--- a tile";      curl -sS -o /dev/null -w '%{http_code}\n' "$base/tiles/15/7904/11856.pbf"
+          echo "--- a glyph";     curl -sS -o /dev/null -w '%{http_code}\n' "$base/fonts/Noto%20Sans%20Regular/0-255.pbf"
+          echo "--- range request on campus.pmtiles"
+          curl -sS -r 0-99 -D - -o /dev/null "$base/campus.pmtiles" | head -20
