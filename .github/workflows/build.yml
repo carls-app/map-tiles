@@ -52,38 +52,9 @@ jobs:
           [ "$bad" = 0 ] || exit 1
           echo "OK: $(find dist/tiles -name '*.pbf' | wc -l) tiles stored uncompressed"
 
-      - name: Check the styles resolve against the built site
-        # A style naming a font, sprite or tile path the build did not produce
-        # renders as a map with no labels and no error, which is miserable to
-        # debug on device. Cheaper to catch here.
-        run: |
-          python3 - <<'PY'
-          import json, os, sys, re
-          site = "https://carls-app.github.io/map-tiles"
-          missing = []
-          for name in ("style.json", "style-pmtiles.json"):
-              s = json.load(open(f"dist/{name}"))
-              # glyphs: check the Latin range of every named fontstack
-              stacks = set()
-              def walk(v):
-                  if isinstance(v, list): [walk(i) for i in v]
-                  elif isinstance(v, dict): [walk(i) for i in v.values()]
-                  elif isinstance(v, str) and v.startswith("Noto Sans"): stacks.add(v)
-              for layer in s["layers"]:
-                  walk(layer.get("layout", {}).get("text-font", []))
-              for stack in stacks:
-                  p = s["glyphs"].replace(site, "dist").replace("{fontstack}", stack).replace("{range}", "0-255")
-                  if not os.path.exists(p): missing.append(f"{name}: {p}")
-              for suffix in (".json", ".png", "@2x.json", "@2x.png"):
-                  p = s["sprite"].replace(site, "dist") + suffix
-                  if not os.path.exists(p): missing.append(f"{name}: {p}")
-              if not s.get("layers"): missing.append(f"{name}: no layers")
-              for src in s["sources"].values():
-                  if "attribution" not in src: missing.append(f"{name}: source missing attribution")
-          if missing:
-              print("\n".join(missing)); sys.exit(1)
-          print("OK: styles resolve, fonts and sprites present, attribution set")
-          PY
+      # build.sh already runs scripts/verify.py, which cross-checks the styles
+      # against the tileset's schema and the vendored fonts and sprites. Those
+      # are the mismatches that render a blank map without erroring.
 
       - name: Publish to gh-pages
         # Force-push a single fresh commit. This branch is entirely owned by this

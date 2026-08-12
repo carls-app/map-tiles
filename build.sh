@@ -224,6 +224,11 @@ BASEMAPS_STYLE_VERSION="$BASEMAPS_STYLE_VERSION" \
 cp "$ROOT/site/index.html" "$DIST/index.html"
 cp "$ROOT/site/.nojekyll" "$DIST/.nojekyll"
 
+# Every mismatch this catches — style against schema, style against vendored
+# assets — renders a blank or label-less map without raising an error, which is
+# miserable to debug on device.
+"$PYTHON" "$ROOT/scripts/verify.py" "$DIST"
+
 # --- 7. report -------------------------------------------------------------
 
 log "Output"
