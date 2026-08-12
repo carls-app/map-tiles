@@ -54,7 +54,9 @@ def main(argv: list[str]) -> None:
     mbtiles_path, bounds, center_lon, center_lat, center_zoom = argv[1:6]
     archives = argv[6:]
     if not archives:
-        raise SystemExit("usage: assemble.py <out.mbtiles> <bounds> <clon> <clat> <cz> <archive...>")
+        raise SystemExit(
+            "usage: assemble.py <out.mbtiles> <bounds> <clon> <clat> <cz> <archive...>"
+        )
 
     db = init_mbtiles(mbtiles_path)
 

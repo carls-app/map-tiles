@@ -27,15 +27,32 @@ def tileset_layers(archive: str) -> set[str]:
     return {layer["id"] for layer in layers}
 
 
+def fontstacks(value, found: set[str]) -> None:
+    """Collect every fontstack named anywhere in a text-font value.
+
+    text-font can be a plain list of names or an expression that picks between
+    them, so this walks the whole structure rather than assuming a shape.
+    """
+    if isinstance(value, list):
+        for item in value:
+            fontstacks(item, found)
+    elif isinstance(value, dict):
+        for item in value.values():
+            fontstacks(item, found)
+    elif isinstance(value, str) and value.startswith("Noto Sans"):
+        found.add(value)
+
+
 def main(dist: str) -> None:
     available = tileset_layers(os.path.join(dist, "campus.pmtiles"))
     problems = []
 
     for name in ("style.json", "style-pmtiles.json"):
         path = os.path.join(dist, name)
-        style = json.load(open(path))
+        with open(path) as f:
+            style = json.load(f)
 
-        referenced = {l["source-layer"] for l in style["layers"] if "source-layer" in l}
+        referenced = {layer["source-layer"] for layer in style["layers"] if "source-layer" in layer}
         for missing in sorted(referenced - available):
             problems.append(f"{name}: references source-layer {missing!r}, not in the tileset")
 
@@ -44,33 +61,31 @@ def main(dist: str) -> None:
         sources = set(style["sources"])
         for layer in style["layers"]:
             if "source" in layer and layer["source"] not in sources:
-                problems.append(f"{name}: layer {layer['id']!r} uses unknown source {layer['source']!r}")
+                problems.append(
+                    f"{name}: layer {layer['id']!r} uses unknown source {layer['source']!r}"
+                )
 
         for source_id, source in style["sources"].items():
             if not source.get("attribution"):
-                problems.append(f"{name}: source {source_id!r} has no attribution (ODbL requires it)")
+                problems.append(
+                    f"{name}: source {source_id!r} has no attribution (ODbL requires it)"
+                )
 
         # Glyphs and sprites are absolute URLs into this same site; confirm the
         # files they point at were actually produced.
         site = style["glyphs"].split("/fonts/")[0]
         stacks: set[str] = set()
-
-        def walk(v):
-            if isinstance(v, list):
-                for i in v:
-                    walk(i)
-            elif isinstance(v, dict):
-                for i in v.values():
-                    walk(i)
-            elif isinstance(v, str) and v.startswith("Noto Sans"):
-                stacks.add(v)
-
         for layer in style["layers"]:
-            walk(layer.get("layout", {}).get("text-font", []))
+            fontstacks(layer.get("layout", {}).get("text-font", []), stacks)
         if not stacks:
             problems.append(f"{name}: no fontstacks found — labels would not render")
         for stack in sorted(stacks):
-            rel = style["glyphs"].replace(site, dist).replace("{fontstack}", stack).replace("{range}", "0-255")
+            rel = (
+                style["glyphs"]
+                .replace(site, dist)
+                .replace("{fontstack}", stack)
+                .replace("{range}", "0-255")
+            )
             if not os.path.exists(rel):
                 problems.append(f"{name}: glyph range missing: {rel}")
 
@@ -83,7 +98,9 @@ def main(dist: str) -> None:
         print("\n".join(f"  {p}" for p in problems), file=sys.stderr)
         raise SystemExit("style verification failed")
 
-    print(f"  styles reference {len(available)} source-layers, all present: {', '.join(sorted(available))}")
+    print(
+        f"  styles reference {len(available)} source-layers, all present: {', '.join(sorted(available))}"
+    )
     print("  fontstacks, sprites and attribution all resolve")
 
 

@@ -137,13 +137,17 @@ const OSM_BUILDINGS = env("OSM_BUILDINGS");
 const stockBuildings = styleLayers.find((l) => l.id === "buildings");
 if (!stockBuildings) throw new Error("expected a basemap layer called buildings");
 
+const parseHex = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
 const flatten = (fg, bg, alpha) => {
-  const parse = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   if (typeof alpha !== "number") return fg; // an expression: leave it be
-  const [fr, fg_, fb] = parse(fg);
-  const [br, bg_, bb] = parse(bg);
+  const [fr, fg_, fb] = parseHex(fg);
+  const [br, bg_, bb] = parseHex(bg);
   const mix = (f, b) => Math.round(b * (1 - alpha) + f * alpha);
-  return "#" + [mix(fr, br), mix(fg_, bg_), mix(fb, bb)].map((v) => v.toString(16).padStart(2, "0")).join("");
+  return (
+    "#" +
+    [mix(fr, br), mix(fg_, bg_), mix(fb, bb)].map((v) => v.toString(16).padStart(2, "0")).join("")
+  );
 };
 
 const BUILDING_FILL = flatten(
@@ -227,8 +231,10 @@ if (OSM_BUILDINGS === "off") {
       "interpolate",
       ["linear"],
       ["zoom"],
-      CAMPUS_BUILDINGS_MINZOOM - 1, 1,
-      CAMPUS_BUILDINGS_MINZOOM + 1, 0.3,
+      CAMPUS_BUILDINGS_MINZOOM - 1,
+      1,
+      CAMPUS_BUILDINGS_MINZOOM + 1,
+      0.3,
     ],
   };
 } else if (OSM_BUILDINGS !== "full") {
@@ -310,9 +316,15 @@ writeFileSync(
   ) + "\n",
 );
 
-console.log(`  campus layers       campus_buildings (z${CAMPUS_BUILDINGS_MINZOOM}+), campus_building_labels (z${CAMPUS_LABELS_MINZOOM}+), OSM buildings: ${OSM_BUILDINGS}`);
-console.log(`  style.json          ${styleLayers.length} layers, tiles/{z}/{x}/{y}.pbf, z${MINZOOM}-z${MAXZOOM} (overzoom to z${STYLE_MAXZOOM})`);
-console.log(`  style-pmtiles.json  ${styleLayers.length} layers, pmtiles://${SITE_URL}/campus.pmtiles`);
+console.log(
+  `  campus layers       campus_buildings (z${CAMPUS_BUILDINGS_MINZOOM}+), campus_building_labels (z${CAMPUS_LABELS_MINZOOM}+), OSM buildings: ${OSM_BUILDINGS}`,
+);
+console.log(
+  `  style.json          ${styleLayers.length} layers, tiles/{z}/{x}/{y}.pbf, z${MINZOOM}-z${MAXZOOM} (overzoom to z${STYLE_MAXZOOM})`,
+);
+console.log(
+  `  style-pmtiles.json  ${styleLayers.length} layers, pmtiles://${SITE_URL}/campus.pmtiles`,
+);
 
 // Guard against the failure mode the README warns about: a style naming a
 // fontstack the site does not host renders with no labels and no error.
@@ -329,4 +341,4 @@ const missing = named.filter((f) => !expected.has(f));
 if (missing.length) {
   throw new Error(`style names fontstacks the build does not vendor: ${missing.join(", ")}`);
 }
-console.log(`  fontstacks verified: ${named.sort().join(", ")}`);
+console.log(`  fontstacks verified: ${named.toSorted().join(", ")}`);

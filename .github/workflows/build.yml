@@ -8,14 +8,25 @@ on:
     # retained for about a week, so there is nothing to gain from running more
     # often — but the build must run often enough that a stale pin gets noticed.
     - cron: "0 7 3 * *"
+  # Dry run on every PR: build and check the output, publish nothing. Without
+  # this the workflow could only be exercised by merging it, and three separate
+  # bugs in it were found that way — one of them a verification step that passed
+  # without verifying anything.
+  pull_request:
 
-# Required to force-push the built site to gh-pages.
+# Required to force-push the built site to gh-pages. PR runs never reach the
+# publish step, and pull_request from a fork gets a read-only token regardless.
 permissions:
   contents: write
 
 concurrency:
-  group: publish-basemap
-  cancel-in-progress: false
+  # PRs get their own group so a dry run can never queue behind, or cancel, a
+  # scheduled publish.
+  group: >-
+    ${{ github.event_name == 'pull_request'
+        && format('basemap-dryrun-{0}', github.ref)
+        || 'publish-basemap' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -65,7 +76,26 @@ jobs:
       # against the tileset's schema and the vendored fonts and sprites. Those
       # are the mismatches that render a blank map without erroring.
 
+      - name: Summarise the build
+        # On a PR this is the payoff: the numbers that would have been published,
+        # visible in the run summary without anything being published.
+        run: |
+          {
+            echo "| | |"
+            echo "| --- | ---: |"
+            echo "| campus.pmtiles | $(numfmt --to=iec --suffix=B "$(wc -c < dist/campus.pmtiles)") |"
+            echo "| tiles | $(find dist/tiles -name '*.pbf' | wc -l) files |"
+            echo "| glyph ranges | $(find dist/fonts -name '*.pbf' | wc -l) |"
+            echo "| style layers | $(python3 -c 'import json;print(len(json.load(open("dist/style.json"))["layers"]))') |"
+            echo "| source-layers | $(python3 -c 'import json;print(len({l["source-layer"] for l in json.load(open("dist/style.json"))["layers"] if "source-layer" in l}))') |"
+            echo
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "Dry run — nothing published."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish to gh-pages
+        if: github.event_name != 'pull_request'
         # Force-push a single fresh commit. This branch is entirely owned by this
         # workflow and there is nothing on it to preserve; without the force-push
         # every rebuild would add another multi-megabyte blob to history forever.
@@ -82,6 +112,7 @@ jobs:
           echo "Published $(find . -type f | wc -l) files to gh-pages"
 
       - name: Verify the published site
+        if: github.event_name != 'pull_request'
         # Pages takes a minute or two to pick up the push. Checking the live
         # site is what catches the whole class of "the build was fine but the
         # thing the app fetches is not".

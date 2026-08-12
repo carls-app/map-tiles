@@ -402,7 +402,15 @@ The force-push is unconditional and deliberate. This repo owns `gh-pages`
 entirely; there is nothing there to preserve. Without it, every rebuild would
 add another ~34 MB of blobs to history forever.
 
-`.github/workflows/build.yml` runs on `workflow_dispatch` and monthly on the 3rd.
+`.github/workflows/build.yml` runs on `workflow_dispatch`, monthly on the 3rd,
+and as a **dry run on every pull request**. The PR run does everything except
+publish: it builds, asserts no tile is gzipped, runs `scripts/verify.py`, and
+writes the resulting sizes and layer counts to the run summary. The publish and
+live-site steps are gated on `github.event_name != 'pull_request'`.
+
+That gate exists because the workflow used to be unexercisable without merging
+it, and three separate bugs were found that way — including a verification step
+that passed in one second without verifying anything.
 It needs `permissions: contents: write`, and Pages must be configured to serve
 from the `gh-pages` branch. Before publishing, CI asserts that no tile is
 gzipped and that every fontstack, sprite and attribution the styles name is
@@ -417,6 +425,40 @@ built — comparing hashes, not just waiting for a `200` — before running its
 checks. Waiting for a `200` is useless here: the previous deployment answers
 `200` for the whole window, so the checks would pass against stale content and
 prove nothing about what was pushed.
+
+## Linting
+
+`.github/workflows/lint.yml` runs on every push to `main` and every PR:
+
+| Tool | Covers | Pinned in |
+| --- | --- | --- |
+| `ruff check` + `ruff format --check` | `scripts/*.py` | `requirements-dev.txt` |
+| `oxlint` + `oxfmt --check` | `scripts/*.mjs` | `package.json` |
+| `shellcheck` | `build.sh` | distro package |
+| `actionlint` | the workflows themselves | `lint.yml`, via a `# renovate:` comment |
+
+Run them locally with `npm run lint` (JS), `ruff check scripts/ && ruff format
+--check scripts/`, and `shellcheck build.sh`.
+
+`actionlint` is here for a specific reason: every workflow bug in this repo so
+far only surfaced when a run actually happened, which meant merging first. It
+catches the half of that which is statically detectable.
+
+There is no TypeScript. `scripts/make-style.mjs` is one unannotated file, and a
+`tsc --checkJs` pass over it reports only missing `@types/node` and implicit
+`any` on unannotated parameters — no real findings — so it would be a dependency
+and a config file for nothing. oxlint covers the correctness rules that do not
+need types.
+
+### Why the style generator is JavaScript
+
+It is the only JS in the repo, and it is JS because `@protomaps/basemaps`
+generates **71 of the style's 73 layers**. That package is the upstream
+cartography for the exact tile schema this repo extracts, it is published only
+to npm, and Renovate tracks it. Porting it to Python would mean owning those 71
+layers by hand and re-porting them on every upstream release — which is the
+schema/style drift described above, the failure that renders a blank map with no
+error. The two layers this repo writes itself are the campus ones.
 
 ## Dependencies
 

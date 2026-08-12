@@ -6,9 +6,15 @@
   "type": "module",
   "license": "ODbL-1.0",
   "scripts": {
-    "build": "./build.sh"
+    "build": "./build.sh",
+    "lint": "oxlint scripts/ && oxfmt --check scripts/",
+    "format": "oxfmt scripts/"
   },
   "dependencies": {
     "@protomaps/basemaps": "5.7.2"
+  },
+  "devDependencies": {
+    "oxfmt": "0.63.0",
+    "oxlint": "1.78.0"
   }
 }
