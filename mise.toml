@@ -21,4 +21,4 @@ shellcheck = "0.11.0"
 actionlint = "1.7.7"
 
 # The PMTiles CLI: does the planet extract and the MBTiles→PMTiles conversion.
-"github:protomaps/go-pmtiles" = { version = "1.28.0", exe = "pmtiles" }
+"github:protomaps/go-pmtiles" = { version = "v1.31.2", exe = "pmtiles" }

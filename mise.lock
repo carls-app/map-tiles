@@ -40,37 +40,43 @@ url = "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1
 url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/221573260"
 
 [[tools."github:protomaps/go-pmtiles"]]
-version = "1.28.0"
+version = "1.31.2"
 backend = "github:protomaps/go-pmtiles"
 
 [tools."github:protomaps/go-pmtiles"."platforms.linux-arm64"]
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708057"
+checksum = "sha256:f8bd47e7ea866863489cad588fbaf2f31f42e5821f7a03f009b3769f05801cb1"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313411"
 
 [tools."github:protomaps/go-pmtiles"."platforms.linux-arm64-musl"]
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708057"
+checksum = "sha256:f8bd47e7ea866863489cad588fbaf2f31f42e5821f7a03f009b3769f05801cb1"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313411"
 
 [tools."github:protomaps/go-pmtiles"."platforms.linux-x64"]
-checksum = "blake3:baf99ec96405941eb20b268e6a6b552dde57d6f16b6578355ac9235e6f0f5339"
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708023"
+checksum = "sha256:3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313332"
 
 [tools."github:protomaps/go-pmtiles"."platforms.linux-x64-musl"]
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708023"
+checksum = "sha256:3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313332"
 
 [tools."github:protomaps/go-pmtiles"."platforms.macos-arm64"]
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles-1.28.0_Darwin_arm64.zip"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708137"
+checksum = "sha256:40528f7f616fcbf91207cd48c8fc023d213f6d86c0cbf1f748732803d1880f3d"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles-1.31.2_Darwin_arm64.zip"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313618"
 
 [tools."github:protomaps/go-pmtiles"."platforms.macos-x64"]
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles-1.28.0_Darwin_x86_64.zip"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708157"
+checksum = "sha256:1f0dc02eee6c58312dd6c509faee1b5c32f0596568af1bf51f1b034e7a88a65b"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles-1.31.2_Darwin_x86_64.zip"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313722"
 
 [tools."github:protomaps/go-pmtiles"."platforms.windows-x64"]
-url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Windows_x86_64.zip"
-url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/250708074"
+checksum = "sha256:a658baa4d7e55020aef6ca17bd9ff9faa1582671266b36f58c52db0ac8e785a1"
+url = "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Windows_x86_64.zip"
+url_api = "https://api.github.com/repos/protomaps/go-pmtiles/releases/assets/486313537"
 
 [[tools.node]]
 version = "26.7.0"
