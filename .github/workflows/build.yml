@@ -39,7 +39,7 @@ jobs:
       # Installs node, python, uv and the pmtiles CLI from mise.toml/mise.lock.
       # build.sh calls `mise install` itself too, so this mostly serves to cache
       # them across runs.
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Install tippecanoe
         # Tiles Carleton's campus layers and joins them into the basemap.

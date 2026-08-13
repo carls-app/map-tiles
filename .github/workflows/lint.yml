@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       # The interpreter comes from mise.toml/mise.lock and the packages from
       # uv.lock, so CI runs exactly what a local `mise install` gives you.
       - run: uv sync --locked
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - run: npm ci
       - name: oxlint
         run: npx oxlint --format=github scripts/
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - name: shellcheck
         # build.sh is the whole pipeline and runs unattended on a schedule, so an
         # unquoted expansion or a typo'd variable is a silent bad publish.
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - name: actionlint
         # Every workflow bug in this repo so far only surfaced when a run
         # actually happened, which needed a merge. This catches the static half.
