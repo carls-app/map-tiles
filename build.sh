@@ -122,6 +122,25 @@ BUILD_LOOKBACK_DAYS=10
 # around this — Pages serves the LFS pointer file, not the object.
 PAGES_FILE_LIMIT=100000000
 
+# Floors, which are the other end of that same question.
+#
+# Every other check in this build catches a *structural* failure: a layer the
+# style names but the tileset lacks, a source feature that reached neither
+# campus layer, a gzipped tile. None of them notice a build that is perfectly
+# well-formed and simply has far less in it than it should — which is what a
+# degraded upstream looks like. The Carleton endpoint answering 200 with a
+# handful of records, or a truncated planet build, both sail through. The
+# workflow then force-pushes the result over a good one, and since something
+# now renders this in production, it stays broken until the next daily run.
+#
+# These are tripwires, not targets: set well below the current numbers so
+# ordinary drift never trips them. A bbox or zoom change in TIERS will move the
+# tile count and archive size, and is expected to move these with it.
+MIN_CAMPUS_BUILDINGS=90    # currently 96
+MIN_CAMPUS_LABELS=115      # currently 124
+MIN_TILES=900              # currently 985
+MIN_ARCHIVE_BYTES=5000000  # currently ~6.4 MB
+
 # ---------------------------------------------------------------------------
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -268,7 +287,9 @@ log "Building the campus layers"
 curl -fsSL -o "$WORK/campus-source.geojson" "$CAMPUS_GEOJSON_URL"
 echo "  fetched $(wc -c < "$WORK/campus-source.geojson" | tr -d ' ') bytes from $CAMPUS_GEOJSON_URL"
 
-py "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
+MIN_CAMPUS_BUILDINGS="$MIN_CAMPUS_BUILDINGS" \
+MIN_CAMPUS_LABELS="$MIN_CAMPUS_LABELS" \
+  py "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
 
 # Nothing may be dropped: there are barely a hundred features and every one of
 # them is a place someone might be trying to find. Hence --no-feature-limit and
@@ -387,6 +408,25 @@ SIZE_BYTES="$(wc -c < "$DIST/campus.pmtiles" | tr -d ' ')"
 if [ "$SIZE_BYTES" -gt "$PAGES_FILE_LIMIT" ]; then
   echo "ERROR: campus.pmtiles is $SIZE_BYTES bytes, over the 100 MB GitHub Pages per-file limit." >&2
   echo "Shrink a tier's bbox or zoom range, or move the archive to a Release asset." >&2
+  exit 1
+fi
+
+# And the floors. Checked against the finished output rather than each stage,
+# so it does not matter which step came up short — a bad extract, a merge that
+# lost a tier, an explode that wrote nothing.
+SHORT=0
+if [ "$TILE_COUNT" -lt "$MIN_TILES" ]; then
+  echo "ERROR: $TILE_COUNT tiles in dist/tiles, floor is $MIN_TILES." >&2
+  SHORT=1
+fi
+if [ "$SIZE_BYTES" -lt "$MIN_ARCHIVE_BYTES" ]; then
+  echo "ERROR: campus.pmtiles is $SIZE_BYTES bytes, floor is $MIN_ARCHIVE_BYTES." >&2
+  SHORT=1
+fi
+if [ "$SHORT" != 0 ]; then
+  echo "Refusing to publish a build this much smaller than expected — see the" >&2
+  echo "floors in build.sh. If you changed a bbox or a zoom in TIERS, that is the" >&2
+  echo "cause and MIN_TILES/MIN_ARCHIVE_BYTES want moving to match." >&2
   exit 1
 fi
 
