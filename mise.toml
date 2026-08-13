@@ -18,7 +18,7 @@ uv = "0.12.3"
 # Linting. Both are single static binaries, which is why they belong here rather
 # than in a package manifest.
 shellcheck = "0.11.0"
-actionlint = "1.7.7"
+actionlint = "1.7.12"
 
 # The PMTiles CLI: does the planet extract and the MBTiles→PMTiles conversion.
 "github:protomaps/go-pmtiles" = { version = "1.28.0", exe = "pmtiles" }
