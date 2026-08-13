@@ -423,8 +423,15 @@ The force-push is unconditional and deliberate. This repo owns `gh-pages`
 entirely; there is nothing there to preserve. Without it, every rebuild would
 add another ~34 MB of blobs to history forever.
 
-`.github/workflows/build.yml` runs on `workflow_dispatch`, monthly on the 3rd,
-and as a **dry run on every pull request**. The PR run does everything except
+`.github/workflows/build.yml` runs on **every push to `main`**, on
+`workflow_dispatch`, monthly on the 3rd, and as a **dry run on every pull
+request**.
+
+Publishing on push is what keeps the site from lagging the source: anything
+merged here can change the output — a bbox, a zoom, a colour, a pinned tool
+version — and waiting for the monthly cron means it silently stays stale until
+someone dispatches a run by hand. Markdown is excluded via `paths-ignore`, since
+documentation cannot change a tile. The PR run does everything except
 publish: it builds, asserts no tile is gzipped, runs `scripts/verify.py`, and
 writes the resulting sizes and layer counts to the run summary. The publish and
 live-site steps are gated on `github.event_name != 'pull_request'`.

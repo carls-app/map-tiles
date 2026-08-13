@@ -1,6 +1,17 @@
 name: Build and publish basemap
 
 on:
+  # Publish whatever lands on main. Anything merged here can change the output —
+  # a bbox, a zoom, a colour, a pinned tool version — and leaving that to the
+  # monthly cron means the site silently lags the source until someone
+  # remembers to dispatch a run by hand.
+  push:
+    branches: [main]
+    # Except documentation, which cannot change a tile.
+    paths-ignore:
+      - "**.md"
+      - LICENSE
+
   workflow_dispatch:
   schedule:
     # Monthly, on the 3rd at 07:00 UTC. OSM data for a college town does not
