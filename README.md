@@ -133,7 +133,24 @@ Two more things worth knowing on the AAO side:
 ## Zoom levels
 
 The tileset is **z0–z15**. The style declares `maxzoom: 15` on the source, and
-MapLibre overzooms — scaling z15 tiles — up to z18 and beyond.
+MapLibre overzooms — scaling z15 tiles — beyond that.
+
+**Nothing here caps how far the user can zoom in.** The MapLibre style spec has
+no property for it; that is the map view's own `maxZoomLevel`, set by the app.
+
+What the tileset does determine is how far in it still looks *sharp*.
+Quantisation is tile size over tile extent, so the basemap's default 4096 units
+per tile puts z15 geometry on a ~21 cm grid — one pixel at z18, two at z19, four
+at z20, where stair-stepping starts to show.
+
+The campus layers are stored at extent 16384 instead (`CAMPUS_DETAIL=14`),
+which is ~5.3 cm and stays sub-pixel past z21. Buying the same precision by
+tiling them to z17 would have cost 94 tiles instead of 7, plus ~250 KB of
+overzoomed basemap to fill the z16/z17 tiles MapLibre would then start
+requesting — which contain no basemap otherwise. Raising the extent costs
+**+1,085 bytes**. Tile extent is a per-layer field in the MVT spec, so a single
+tile carries `roads` at 4096 and `campus_buildings` at 16384 with no special
+handling by the client.
 
 This is not a compromise on detail. z15 is the Protomaps planet build's maximum,
 and at that zoom it carries full-resolution building footprints and footpaths;
@@ -380,7 +397,7 @@ while working fine on Pages.)
 ### Changing the bbox or zooms
 
 Everything tunable is in one block at the top of `build.sh`: `REGION_BBOX`,
-`CAMPUS_BBOX`, `MINZOOM`, `MAXZOOM`, `STYLE_MAXZOOM` and the `TIERS` array.
+`CAMPUS_BBOX`, `MINZOOM`, `MAXZOOM` and the `TIERS` array.
 
 Editing the two boxes is usually enough, since `TIERS` refers to them. If you
 need a different zoom split, edit `TIERS` — that is what actually drives
@@ -406,8 +423,14 @@ The force-push is unconditional and deliberate. This repo owns `gh-pages`
 entirely; there is nothing there to preserve. Without it, every rebuild would
 add another ~34 MB of blobs to history forever.
 
-`.github/workflows/build.yml` runs on `workflow_dispatch`, monthly on the 3rd,
-and as a **dry run on every pull request**. The PR run does everything except
+`.github/workflows/build.yml` runs on **every push to `main`**, **daily** at
+07:00 UTC, on `workflow_dispatch`, and as a **dry run on every pull request**.
+
+Publishing on push is what keeps the site from lagging the source: anything
+merged here can change the output — a bbox, a zoom, a colour, a pinned tool
+version — and waiting for the monthly cron means it silently stays stale until
+someone dispatches a run by hand. Markdown is excluded via `paths-ignore`, since
+documentation cannot change a tile. The PR run does everything except
 publish: it builds, asserts no tile is gzipped, runs `scripts/verify.py`, and
 writes the resulting sizes and layer counts to the run summary. The publish and
 live-site steps are gated on `github.event_name != 'pull_request'`.
@@ -420,9 +443,15 @@ from the `gh-pages` branch. Before publishing, CI asserts that no tile is
 gzipped and that every fontstack, sprite and attribution the styles name is
 actually present — both are failures that render a broken map without erroring.
 
-Monthly is deliberate: OSM data for a college town does not move fast, and the
-Protomaps daily builds this pulls from are only retained for about a week, so
-`build.sh` probes backwards from today to find one.
+Daily is deliberate, and it is what makes fixing the map practical: Protomaps
+rebuilds the planet every day from OSM minutely replication, and the build this
+pulls from carries OSM data to about 04:00 UTC the same day. So an OSM edit
+reaches the app roughly a day later without anyone touching this repo. 07:00 UTC
+leaves the upstream build a few hours to publish.
+
+Those daily builds are only retained for about a week and there is no index of
+them, so `build.sh` probes backwards from today until one answers — which also
+covers a run that fires before the day's build lands.
 
 The publish step waits until Pages is actually serving the archive it just
 built — comparing hashes, not just waiting for a `200` — before running its

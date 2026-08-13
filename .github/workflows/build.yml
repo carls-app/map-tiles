@@ -1,13 +1,26 @@
 name: Build and publish basemap
 
 on:
+  # Publish whatever lands on main. Anything merged here can change the output —
+  # a bbox, a zoom, a colour, a pinned tool version — and leaving that to the
+  # monthly cron means the site silently lags the source until someone
+  # remembers to dispatch a run by hand.
+  push:
+    branches: [main]
+    # Except documentation, which cannot change a tile.
+    paths-ignore:
+      - "**.md"
+      - LICENSE
+
   workflow_dispatch:
   schedule:
-    # Monthly, on the 3rd at 07:00 UTC. OSM data for a college town does not
-    # move fast, and the Protomaps daily builds this pulls from are only
-    # retained for about a week, so there is nothing to gain from running more
-    # often — but the build must run often enough that a stale pin gets noticed.
-    - cron: "0 7 3 * *"
+    # Daily at 07:00 UTC. Protomaps rebuilds the planet every day from OSM
+    # minutely replication — the build this pulls from carries OSM data to
+    # about 04:00 UTC the same day — so a daily run means an OSM edit reaches
+    # the app roughly a day later. 07:00 leaves the upstream build a few hours
+    # to publish. A run costs well under a minute, and the force-push keeps
+    # gh-pages at a single commit however often it happens.
+    - cron: "0 7 * * *"
   # Dry run on every PR: build and check the output, publish nothing. Without
   # this the workflow could only be exercised by merging it, and three separate
   # bugs in it were found that way — one of them a verification step that passed
