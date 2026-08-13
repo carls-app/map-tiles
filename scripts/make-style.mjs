@@ -240,12 +240,10 @@ if (OSM_BUILDINGS === "off") {
   throw new Error(`OSM_BUILDINGS must be one of full, ghost, off — got "${OSM_BUILDINGS}"`);
 }
 
-const ATTRIBUTION = [
-  '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>',
-  // Carleton's building data is Carleton's, not OpenStreetMap's, and is
-  // credited separately for that reason.
-  '<a href="https://www.carleton.edu/" target="_blank">Carleton College</a>',
-].join(" | ");
+// Defined once in build.sh, so the styles and the archive's own metadata cannot
+// drift apart. Carleton's building data is Carleton's, not OpenStreetMap's, and
+// is credited separately for that reason.
+const ATTRIBUTION = env("ATTRIBUTION");
 
 const base = {
   version: 8,

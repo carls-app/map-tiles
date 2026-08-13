@@ -69,6 +69,13 @@ one `campus.pmtiles` and one `tiles/{z}/{x}/{y}.pbf` tree. The exploded tree is
 regenerated from the joined archive, so both published forms are the same
 tileset by construction.
 
+The whole pipeline is PMTiles end to end: `pmtiles merge` combines the zoom
+tiers, tippecanoe writes the campus layers as PMTiles, and `tile-join` reads and
+writes PMTiles too — so the published archive is produced directly, with no
+MBTiles staging format and no format conversion. `pmtiles merge` also *requires*
+its inputs to be disjoint, which turns "the tiers must not overlap" from an
+assumption into something the build enforces.
+
 ## Using it from AAO
 
 In `source/features/map/urls.ts`:

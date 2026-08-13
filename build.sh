@@ -94,6 +94,11 @@ TIERS=(
 # since MapLibre Native resolves style-relative URLs inconsistently.
 SITE_URL="${SITE_URL:-https://carls-app.github.io/map-tiles}"
 
+# Credited on every published form: the styles' source `attribution`, and the
+# archive's own metadata. Carleton's building data is Carleton's, not
+# OpenStreetMap's, so it is named separately. ODbL requires the OSM half.
+ATTRIBUTION='<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a> | <a href="https://www.carleton.edu/" target="_blank">Carleton College</a>'
+
 # Map opens here: between the two campuses.
 CENTER_LON=-93.167
 CENTER_LAT=44.462
@@ -248,10 +253,13 @@ done
 
 log "Merging the basemap tiers"
 
-py "$ROOT/scripts/assemble.py" \
-  "$WORK/basemap.mbtiles" \
-  "$DATA_BOUNDS" "$CENTER_LON" "$CENTER_LAT" "$CENTER_ZOOM" \
-  "${TIER_FILES[@]}"
+# `pmtiles merge` requires its inputs to be disjoint and refuses otherwise,
+# which is a stronger guarantee than this used to have: the tiers are supposed
+# to cover separate zoom ranges, and a mistake there now fails loudly instead
+# of one tier quietly shadowing another.
+rm -f "$WORK/basemap.pmtiles"
+$PMTILES merge "${TIER_FILES[@]}" "$WORK/basemap.pmtiles" --quiet
+$PMTILES show "$WORK/basemap.pmtiles" | grep -E 'zoom|count' | sed 's/^/  /'
 
 # --- 5. Carleton's campus layers -------------------------------------------
 
@@ -266,14 +274,14 @@ py "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
 # them is a place someone might be trying to find. Hence --no-feature-limit and
 # --no-tile-size-limit, and emphatically not --drop-densest-as-needed. Points
 # are also dropped by default below the base zoom, which --drop-rate=1 disables.
-tippecanoe -q -f -o "$WORK/campus_buildings.mbtiles" \
+tippecanoe -q -f -o "$WORK/campus_buildings.pmtiles" \
   --layer=campus_buildings \
   --minimum-zoom="$CAMPUS_BUILDINGS_MINZOOM" --maximum-zoom="$MAXZOOM" \
   --full-detail="$CAMPUS_DETAIL" \
   --no-feature-limit --no-tile-size-limit --no-tiny-polygon-reduction \
   "$WORK/campus_buildings.geojson"
 
-tippecanoe -q -f -o "$WORK/campus_building_labels.mbtiles" \
+tippecanoe -q -f -o "$WORK/campus_building_labels.pmtiles" \
   --layer=campus_building_labels \
   --minimum-zoom="$CAMPUS_LABELS_MINZOOM" --maximum-zoom="$MAXZOOM" \
   --full-detail="$CAMPUS_DETAIL" \
@@ -282,15 +290,16 @@ tippecanoe -q -f -o "$WORK/campus_building_labels.mbtiles" \
 
 # --- 6. join into both published forms -------------------------------------
 
-log "Joining campus layers into the basemap and converting"
+log "Joining campus layers into the basemap"
 
 # One archive and one tile tree for the app, rather than two sources to juggle.
-tile-join -f -pk -o "$WORK/joined.mbtiles" \
-  "$WORK/basemap.mbtiles" \
-  "$WORK/campus_buildings.mbtiles" \
-  "$WORK/campus_building_labels.mbtiles" >/dev/null
+# tile-join reads and writes PMTiles as well as MBTiles, so this goes straight
+# to the published archive with no staging format in between.
+tile-join -f -pk -A "$ATTRIBUTION" -o "$DIST/campus.pmtiles" \
+  "$WORK/basemap.pmtiles" \
+  "$WORK/campus_buildings.pmtiles" \
+  "$WORK/campus_building_labels.pmtiles" >/dev/null
 
-$PMTILES convert "$WORK/joined.mbtiles" "$DIST/campus.pmtiles" --tmpdir="$WORK" 2>&1 | sed 's/^/  /'
 $PMTILES verify "$DIST/campus.pmtiles"
 $PMTILES show "$DIST/campus.pmtiles" | grep -E 'zoom|bounds|tile type|compression|count' | sed 's/^/  /'
 
@@ -346,6 +355,7 @@ DATA_BOUNDS="$DATA_BOUNDS" \
 MINZOOM="$MINZOOM" \
 MAXZOOM="$MAXZOOM" \
 CENTER_LON="$CENTER_LON" CENTER_LAT="$CENTER_LAT" CENTER_ZOOM="$CENTER_ZOOM" \
+ATTRIBUTION="$ATTRIBUTION" \
 CAMPUS_BUILDINGS_MINZOOM="$CAMPUS_BUILDINGS_MINZOOM" \
 CAMPUS_LABELS_MINZOOM="$CAMPUS_LABELS_MINZOOM" \
 OSM_BUILDINGS="$OSM_BUILDINGS" \
