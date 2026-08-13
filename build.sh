@@ -94,8 +94,10 @@ CENTER_ZOOM=14
 # renovate: datasource=github-releases depName=protomaps/go-pmtiles
 PMTILES_VERSION="1.28.0"
 
-# renovate: datasource=pypi depName=pmtiles
-PMTILES_PY_VERSION="3.7.0"
+# renovate: datasource=github-releases depName=astral-sh/uv
+UV_VERSION="0.12.3"
+
+# The Python side is pinned in pyproject.toml and uv.lock, not here.
 
 # The font and sprite assets are a repo without releases, so this tracks the tip
 # of its default branch by digest.
@@ -178,15 +180,28 @@ if [ ! -x "$PMTILES" ]; then
 fi
 "$PMTILES" version
 
-# The assembler reads the archives with the official Python PMTiles library. A
-# venv keeps this off the system interpreter, which some distros protect.
-VENV="$WORK/venv"
-if [ ! -x "$VENV/bin/python" ]; then
-  python3 -m venv "$VENV"
-  "$VENV/bin/pip" install --quiet --upgrade pip
+# The Python scripts read PMTiles archives with the official library. uv resolves
+# the interpreter and the dependency from pyproject.toml and uv.lock, so the
+# versions are locked rather than whatever the machine happens to have — and the
+# lockfile is something Renovate can see.
+UV="$WORK/uv"
+if [ ! -x "$UV" ]; then
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64)   UV_ASSET="x86_64-unknown-linux-gnu" ;;
+    Linux-aarch64)  UV_ASSET="aarch64-unknown-linux-gnu" ;;
+    Darwin-x86_64)  UV_ASSET="x86_64-apple-darwin" ;;
+    Darwin-arm64)   UV_ASSET="aarch64-apple-darwin" ;;
+    *) echo "unsupported platform: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+  esac
+  curl -fsSL -o "$WORK/uv.tar.gz" \
+    "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ASSET}.tar.gz"
+  tar xzf "$WORK/uv.tar.gz" -C "$WORK" --strip-components=1 "uv-${UV_ASSET}/uv"
+  chmod +x "$UV"
 fi
-"$VENV/bin/pip" install --quiet "pmtiles==${PMTILES_PY_VERSION}"
-PYTHON="$VENV/bin/python"
+"$UV" --version
+
+# Run a project script against the locked environment.
+py() { "$UV" run --quiet --project "$ROOT" "$@"; }
 
 # tippecanoe tiles the campus layers and tile-join merges them into the basemap.
 # Unlike the rest of the toolchain it is not fetched here — it is a C++ build,
@@ -248,7 +263,7 @@ done
 
 log "Merging the basemap tiers"
 
-"$PYTHON" "$ROOT/scripts/assemble.py" \
+py "$ROOT/scripts/assemble.py" \
   "$WORK/basemap.mbtiles" \
   "$DATA_BOUNDS" "$CENTER_LON" "$CENTER_LAT" "$CENTER_ZOOM" \
   "${TIER_FILES[@]}"
@@ -260,7 +275,7 @@ log "Building the campus layers"
 curl -fsSL -o "$WORK/campus-source.geojson" "$CAMPUS_GEOJSON_URL"
 echo "  fetched $(wc -c < "$WORK/campus-source.geojson" | tr -d ' ') bytes from $CAMPUS_GEOJSON_URL"
 
-"$PYTHON" "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
+py "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
 
 # Nothing may be dropped: there are barely a hundred features and every one of
 # them is a place someone might be trying to find. Hence --no-feature-limit and
@@ -295,7 +310,7 @@ tile-join -f -pk -o "$WORK/joined.mbtiles" \
 # The exploded tree comes from the joined archive, so the two published forms
 # are the same tileset by construction.
 log "Exploding to tiles/{z}/{x}/{y}.pbf (uncompressed)"
-"$PYTHON" "$ROOT/scripts/explode.py" "$DIST/campus.pmtiles" "$DIST/tiles"
+py "$ROOT/scripts/explode.py" "$DIST/campus.pmtiles" "$DIST/tiles"
 
 # --- 7. glyphs and sprites -------------------------------------------------
 #
@@ -356,7 +371,7 @@ cp "$ROOT/site/.nojekyll" "$DIST/.nojekyll"
 # Every mismatch this catches — style against schema, style against vendored
 # assets — renders a blank or label-less map without raising an error, which is
 # miserable to debug on device.
-"$PYTHON" "$ROOT/scripts/verify.py" "$DIST"
+py "$ROOT/scripts/verify.py" "$DIST"
 
 # --- 9. report -------------------------------------------------------------
 

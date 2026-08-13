@@ -1,4 +1,0 @@
-# Linting only — the build itself installs its own runtime dependency (pmtiles)
-# into .work/venv, pinned in build.sh. Renovate manages this file with its pip
-# manager, so no `# renovate:` comment is needed here.
-ruff==0.15.8

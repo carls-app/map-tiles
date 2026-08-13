@@ -1,0 +1,16 @@
+[project]
+name = "aao-map-tiles"
+version = "1.0.0"
+description = "Vector basemap tiles for All About Olaf (StoDevX/AAO-React-Native)"
+requires-python = ">=3.12"
+
+# The one runtime dependency: build.sh's assembler and exploder read PMTiles
+# archives with the official library. Previously pinned by hand in build.sh and
+# installed into a hand-rolled venv; uv.lock does both jobs better.
+dependencies = ["pmtiles==3.7.0"]
+
+[dependency-groups]
+dev = ["ruff==0.15.8"]
+
+# No [tool.ruff] section on purpose — ruff's own defaults, so its line length
+# and rule set track the pinned version rather than a local opinion.

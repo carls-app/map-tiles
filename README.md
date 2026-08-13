@@ -340,16 +340,18 @@ app taps against and which therefore cannot be hidden.
 
 ## Building locally
 
-Needs `bash`, `curl`, `git`, `python3` (3.9+), `node` (20+) and **tippecanoe**
-(which supplies `tile-join`):
+Needs `bash`, `curl`, `git`, `python3` (for one config check), `node` (20+) and
+**tippecanoe** (which supplies `tile-join`):
 
 ```console
 $ sudo apt-get install -y tippecanoe     # Debian/Ubuntu
 $ brew install tippecanoe                # macOS
 ```
 
-Everything else — the `pmtiles` CLI, the Python library, the font and sprite
-assets — is fetched and pinned by the script.
+Everything else — the `pmtiles` CLI, `uv`, the Python interpreter and library,
+the font and sprite assets — is fetched and pinned by the script. Python comes
+from `.python-version` (3.14) and `uv.lock`, so the build runs the same
+interpreter and the same package versions everywhere.
 
 ```console
 $ ./build.sh
@@ -432,13 +434,16 @@ prove nothing about what was pushed.
 
 | Tool | Covers | Pinned in |
 | --- | --- | --- |
-| `ruff check` + `ruff format --check` | `scripts/*.py` | `requirements-dev.txt` |
+| `ruff check` + `ruff format --check` | `scripts/*.py` | `pyproject.toml` / `uv.lock` |
 | `oxlint` + `oxfmt --check` | `scripts/*.mjs` | `package.json` |
 | `shellcheck` | `build.sh` | distro package |
 | `actionlint` | the workflows themselves | `lint.yml`, via a `# renovate:` comment |
 
-Run them locally with `npm run lint` (JS), `ruff check scripts/ && ruff format
---check scripts/`, and `shellcheck build.sh`.
+Run them locally with `npm run lint` (JS), `uv run ruff check scripts/ && uv run
+ruff format --check scripts/`, and `shellcheck build.sh`.
+
+ruff runs on its own floating defaults — no `[tool.ruff]` section — so its line
+length and rule set track the pinned version rather than a local opinion.
 
 `actionlint` is here for a specific reason: every workflow bug in this repo so
 far only surfaced when a run actually happened, which meant merging first. It
@@ -470,8 +475,9 @@ Four things are pinned, in three places:
 | What | Where | How Renovate sees it |
 | --- | --- | --- |
 | `@protomaps/basemaps` | `package.json` | npm manager |
+| `pmtiles` (Python), `ruff` | `pyproject.toml` / `uv.lock` | pep621 manager |
 | `actions/*` | `.github/workflows/build.yml` | github-actions manager, digest-pinned |
-| `go-pmtiles`, PyPI `pmtiles` | `build.sh` | custom manager, `# renovate:` comments |
+| `go-pmtiles`, `uv`, `actionlint` | `build.sh`, `lint.yml` | custom manager, `# renovate:` comments |
 | `protomaps/basemaps-assets` | `build.sh` | custom manager, commit digest off `main` |
 
 The `# renovate:` comments above the pins in `build.sh` are load-bearing — they

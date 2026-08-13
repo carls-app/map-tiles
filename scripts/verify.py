@@ -52,9 +52,15 @@ def main(dist: str) -> None:
         with open(path) as f:
             style = json.load(f)
 
-        referenced = {layer["source-layer"] for layer in style["layers"] if "source-layer" in layer}
+        referenced = {
+            layer["source-layer"]
+            for layer in style["layers"]
+            if "source-layer" in layer
+        }
         for missing in sorted(referenced - available):
-            problems.append(f"{name}: references source-layer {missing!r}, not in the tileset")
+            problems.append(
+                f"{name}: references source-layer {missing!r}, not in the tileset"
+            )
 
         # Every layer must point at a source that exists, or it silently draws
         # nothing.

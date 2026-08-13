@@ -101,7 +101,9 @@ def main(src: str, outdir: str) -> None:
             )
 
         if len(points) > 1:
-            problems.append(f"{feature['id']}: {len(points)} label anchors, using the first")
+            problems.append(
+                f"{feature['id']}: {len(points)} label anchors, using the first"
+            )
         if points:
             labels.append(
                 {
@@ -114,7 +116,10 @@ def main(src: str, outdir: str) -> None:
             problems.append(f"{feature['id']}: no label anchor, will not be labelled")
 
     os.makedirs(outdir, exist_ok=True)
-    for name, collection in (("campus_buildings", buildings), ("campus_building_labels", labels)):
+    for name, collection in (
+        ("campus_buildings", buildings),
+        ("campus_building_labels", labels),
+    ):
         with open(os.path.join(outdir, f"{name}.geojson"), "w") as out:
             json.dump({"type": "FeatureCollection", "features": collection}, out)
 

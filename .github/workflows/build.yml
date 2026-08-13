@@ -38,12 +38,12 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
           cache: npm
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
+      # build.sh fetches its own pinned uv, so nothing here needs to set up
+      # Python — the interpreter comes from .python-version and the packages
+      # from uv.lock.
 
       - name: Install tippecanoe
         # Tiles Carleton's campus layers and joins them into the basemap.

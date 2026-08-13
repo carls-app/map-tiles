@@ -1,9 +1,12 @@
 # Build output. Published to gh-pages, never committed to the default branch.
 /dist/
 
-# Build intermediates and downloaded tools: the pmtiles binary, the Python venv,
-# the vendored asset checkout. All re-fetched by build.sh on a clean checkout.
+# Build intermediates and downloaded tools: the pmtiles and uv binaries, the
+# vendored asset checkout. All re-fetched by build.sh on a clean checkout.
 /.work/
+
+# uv's project environment. uv.lock is committed; this is not.
+/.venv/
 
 node_modules/
 
