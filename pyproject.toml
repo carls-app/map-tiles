@@ -10,7 +10,7 @@ requires-python = "==3.14.7"
 dependencies = ["pmtiles==3.7.0"]
 
 [dependency-groups]
-dev = ["ruff==0.15.8"]
+dev = ["ruff==0.16.2"]
 
 # No line length and no formatter settings, so those track the pinned ruff
 # rather than a local opinion.
