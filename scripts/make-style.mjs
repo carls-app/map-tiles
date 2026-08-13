@@ -33,7 +33,6 @@ const SITE_URL = env("SITE_URL").replace(/\/$/, "");
 const [west, south, east, north] = env("DATA_BOUNDS").split(",").map(Number);
 const MINZOOM = Number(env("MINZOOM"));
 const MAXZOOM = Number(env("MAXZOOM"));
-const STYLE_MAXZOOM = Number(env("STYLE_MAXZOOM"));
 const CENTER = [Number(env("CENTER_LON")), Number(env("CENTER_LAT"))];
 const CENTER_ZOOM = Number(env("CENTER_ZOOM"));
 
@@ -271,8 +270,10 @@ const base = {
   layers: styleLayers,
 };
 
-// The tileset stops at MAXZOOM; MapLibre scales those tiles the rest of the way
-// to STYLE_MAXZOOM rather than requesting tiles that do not exist.
+// The tileset stops at MAXZOOM; MapLibre scales those tiles beyond it rather
+// than requesting tiles that do not exist. Nothing here caps how far the user
+// can zoom — the style spec has no property for it, so that is the map view's
+// maxZoomLevel, set by the app.
 const sourceCommon = {
   type: "vector",
   attribution: ATTRIBUTION,
@@ -320,7 +321,7 @@ console.log(
   `  campus layers       campus_buildings (z${CAMPUS_BUILDINGS_MINZOOM}+), campus_building_labels (z${CAMPUS_LABELS_MINZOOM}+), OSM buildings: ${OSM_BUILDINGS}`,
 );
 console.log(
-  `  style.json          ${styleLayers.length} layers, tiles/{z}/{x}/{y}.pbf, z${MINZOOM}-z${MAXZOOM} (overzoom to z${STYLE_MAXZOOM})`,
+  `  style.json          ${styleLayers.length} layers, tiles/{z}/{x}/{y}.pbf, z${MINZOOM}-z${MAXZOOM} (overzoomed beyond)`,
 );
 console.log(
   `  style-pmtiles.json  ${styleLayers.length} layers, pmtiles://${SITE_URL}/campus.pmtiles`,

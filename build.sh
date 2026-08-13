@@ -26,12 +26,12 @@ REGION_BBOX="-93.50,44.28,-92.84,44.75"
 # Dundas, with room to pan. This is the part that gets high-zoom detail.
 CAMPUS_BBOX="-93.28,44.38,-93.05,44.55"
 
-# Zoom range. The Protomaps planet build tops out at z15, so MAXZOOM cannot
-# usefully exceed that; the style overzooms z15 tiles the rest of the way to
-# STYLE_MAXZOOM for campus detail. See README ("Zoom levels").
+# Zoom range of the basemap tiles. The Protomaps planet build tops out at z15,
+# so MAXZOOM cannot usefully exceed that — MapLibre overzooms z15 tiles beyond
+# it. How far the user may pinch in is not set here and cannot be: the style
+# spec has no such property. It is the map view's own maxZoomLevel, in the app.
 MINZOOM=0
 MAXZOOM=15
-STYLE_MAXZOOM=18
 
 # Carleton's own building data, joined into the tileset as two extra layers on
 # top of the OSM basemap. This is Carleton's, not OpenStreetMap's, and is
@@ -327,7 +327,6 @@ SITE_URL="$SITE_URL" \
 DATA_BOUNDS="$DATA_BOUNDS" \
 MINZOOM="$MINZOOM" \
 MAXZOOM="$MAXZOOM" \
-STYLE_MAXZOOM="$STYLE_MAXZOOM" \
 CENTER_LON="$CENTER_LON" CENTER_LAT="$CENTER_LAT" CENTER_ZOOM="$CENTER_ZOOM" \
 CAMPUS_BUILDINGS_MINZOOM="$CAMPUS_BUILDINGS_MINZOOM" \
 CAMPUS_LABELS_MINZOOM="$CAMPUS_LABELS_MINZOOM" \

@@ -133,7 +133,14 @@ Two more things worth knowing on the AAO side:
 ## Zoom levels
 
 The tileset is **z0–z15**. The style declares `maxzoom: 15` on the source, and
-MapLibre overzooms — scaling z15 tiles — up to z18 and beyond.
+MapLibre overzooms — scaling z15 tiles — beyond that.
+
+**Nothing here caps how far the user can zoom in.** The MapLibre style spec has
+no property for it; that is the map view's own `maxZoomLevel`, set by the app.
+What the tileset does determine is how far in it still looks sharp: coordinates
+are stored at 4096 units per tile, so z15 quantises geometry to about 21 cm —
+exactly one pixel at z18, two at z19, four at z20. Stair-stepping becomes
+visible around z20.
 
 This is not a compromise on detail. z15 is the Protomaps planet build's maximum,
 and at that zoom it carries full-resolution building footprints and footpaths;
@@ -380,7 +387,7 @@ while working fine on Pages.)
 ### Changing the bbox or zooms
 
 Everything tunable is in one block at the top of `build.sh`: `REGION_BBOX`,
-`CAMPUS_BBOX`, `MINZOOM`, `MAXZOOM`, `STYLE_MAXZOOM` and the `TIERS` array.
+`CAMPUS_BBOX`, `MINZOOM`, `MAXZOOM` and the `TIERS` array.
 
 Editing the two boxes is usually enough, since `TIERS` refers to them. If you
 need a different zoom split, edit `TIERS` — that is what actually drives
