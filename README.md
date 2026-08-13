@@ -423,9 +423,8 @@ The force-push is unconditional and deliberate. This repo owns `gh-pages`
 entirely; there is nothing there to preserve. Without it, every rebuild would
 add another ~34 MB of blobs to history forever.
 
-`.github/workflows/build.yml` runs on **every push to `main`**, on
-`workflow_dispatch`, monthly on the 3rd, and as a **dry run on every pull
-request**.
+`.github/workflows/build.yml` runs on **every push to `main`**, **daily** at
+07:00 UTC, on `workflow_dispatch`, and as a **dry run on every pull request**.
 
 Publishing on push is what keeps the site from lagging the source: anything
 merged here can change the output — a bbox, a zoom, a colour, a pinned tool
@@ -444,9 +443,15 @@ from the `gh-pages` branch. Before publishing, CI asserts that no tile is
 gzipped and that every fontstack, sprite and attribution the styles name is
 actually present — both are failures that render a broken map without erroring.
 
-Monthly is deliberate: OSM data for a college town does not move fast, and the
-Protomaps daily builds this pulls from are only retained for about a week, so
-`build.sh` probes backwards from today to find one.
+Daily is deliberate, and it is what makes fixing the map practical: Protomaps
+rebuilds the planet every day from OSM minutely replication, and the build this
+pulls from carries OSM data to about 04:00 UTC the same day. So an OSM edit
+reaches the app roughly a day later without anyone touching this repo. 07:00 UTC
+leaves the upstream build a few hours to publish.
+
+Those daily builds are only retained for about a week and there is no index of
+them, so `build.sh` probes backwards from today until one answers — which also
+covers a run that fires before the day's build lands.
 
 The publish step waits until Pages is actually serving the archive it just
 built — comparing hashes, not just waiting for a `200` — before running its
