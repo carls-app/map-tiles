@@ -12,5 +12,16 @@ dependencies = ["pmtiles==3.7.0"]
 [dependency-groups]
 dev = ["ruff==0.15.8"]
 
-# No [tool.ruff] section on purpose — ruff's own defaults, so its line length
-# and rule set track the pinned version rather than a local opinion.
+# No line length and no formatter settings, so those track the pinned ruff
+# rather than a local opinion.
+[tool.ruff.lint]
+# `extend-select` adds to ruff's defaults rather than replacing them — the
+# default E/F rules stay on, and these four groups stack on top. Between them
+# they caught four of the five defects in the commit that introduced linting
+# here, none of which the defaults see.
+extend-select = [
+  "I",    # import sorting
+  "UP",   # pyupgrade — no reason to write pre-3.12 Python
+  "B",    # bugbear — caught B023, a closure capturing a loop variable
+  "SIM",  # simplify — caught two leaked file handles
+]
