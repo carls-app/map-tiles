@@ -137,10 +137,20 @@ MapLibre overzooms — scaling z15 tiles — beyond that.
 
 **Nothing here caps how far the user can zoom in.** The MapLibre style spec has
 no property for it; that is the map view's own `maxZoomLevel`, set by the app.
-What the tileset does determine is how far in it still looks sharp: coordinates
-are stored at 4096 units per tile, so z15 quantises geometry to about 21 cm —
-exactly one pixel at z18, two at z19, four at z20. Stair-stepping becomes
-visible around z20.
+
+What the tileset does determine is how far in it still looks *sharp*.
+Quantisation is tile size over tile extent, so the basemap's default 4096 units
+per tile puts z15 geometry on a ~21 cm grid — one pixel at z18, two at z19, four
+at z20, where stair-stepping starts to show.
+
+The campus layers are stored at extent 16384 instead (`CAMPUS_DETAIL=14`),
+which is ~5.3 cm and stays sub-pixel past z21. Buying the same precision by
+tiling them to z17 would have cost 94 tiles instead of 7, plus ~250 KB of
+overzoomed basemap to fill the z16/z17 tiles MapLibre would then start
+requesting — which contain no basemap otherwise. Raising the extent costs
+**+1,085 bytes**. Tile extent is a per-layer field in the MVT spec, so a single
+tile carries `roads` at 4096 and `campus_buildings` at 16384 with no special
+handling by the client.
 
 This is not a compromise on detail. z15 is the Protomaps planet build's maximum,
 and at that zoom it carries full-resolution building footprints and footpaths;

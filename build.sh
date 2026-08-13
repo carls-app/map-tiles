@@ -46,6 +46,22 @@ CAMPUS_GEOJSON_URL="https://carleton.api.frogpond.tech/v1/map/geojson"
 CAMPUS_BUILDINGS_MINZOOM=14
 CAMPUS_LABELS_MINZOOM=15
 
+# How finely campus geometry is stored, as a power of two: 14 means 16384 units
+# per tile instead of tippecanoe's default 4096.
+#
+# Quantisation is tile size over extent, so precision can be bought either by
+# adding zoom levels (shrinking the numerator) or by raising the extent. At z15
+# the default 4096 quantises to ~21 cm — one pixel at z18, four at z20. Extent
+# 16384 gets that to ~5.3 cm, sharp past z21.
+#
+# Raising the extent is the cheap half of that trade: same 7 tiles, same 48 KB.
+# Reaching the same 5.3 cm by tiling to z17 instead would cost 94 campus tiles
+# and, because MapLibre would then fetch real z16/z17 tiles that hold no
+# basemap, another ~250 KB of overzoomed basemap to fill them. Tile extent is a
+# per-layer field in the MVT spec, so a tile can carry basemap layers at 4096
+# and these at 16384 with no special handling by the client.
+CAMPUS_DETAIL=14
+
 # What to do with the basemap's own OSM building footprints, which overlap
 # Carleton's over campus. OSM's outlines are generally the more accurate of the
 # two, so the campus layer is painted in the same grey with no outline and the
@@ -253,12 +269,14 @@ py "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
 tippecanoe -q -f -o "$WORK/campus_buildings.mbtiles" \
   --layer=campus_buildings \
   --minimum-zoom="$CAMPUS_BUILDINGS_MINZOOM" --maximum-zoom="$MAXZOOM" \
+  --full-detail="$CAMPUS_DETAIL" \
   --no-feature-limit --no-tile-size-limit --no-tiny-polygon-reduction \
   "$WORK/campus_buildings.geojson"
 
 tippecanoe -q -f -o "$WORK/campus_building_labels.mbtiles" \
   --layer=campus_building_labels \
   --minimum-zoom="$CAMPUS_LABELS_MINZOOM" --maximum-zoom="$MAXZOOM" \
+  --full-detail="$CAMPUS_DETAIL" \
   --no-feature-limit --no-tile-size-limit --drop-rate=1 \
   "$WORK/campus_building_labels.geojson"
 
