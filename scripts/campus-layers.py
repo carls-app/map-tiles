@@ -46,6 +46,10 @@ def properties(feature: dict) -> dict:
     }
 
 
+def env_floor(name: str) -> int:
+    return int(os.environ.get(name) or 0)
+
+
 def polygons_of(geometry: dict) -> list:
     """Every polygon in a geometry, as a list of MultiPolygon-shaped parts."""
     kind = geometry["type"]
@@ -144,6 +148,28 @@ def main(src: str, outdir: str) -> None:
     if missing:
         raise SystemExit(
             f"  {len(missing)} source features reached neither layer: {sorted(missing)[:10]}"
+        )
+
+    # The check above catches features lost *between* the source and a layer.
+    # This one catches a source that arrived short in the first place, which
+    # that check cannot see: an endpoint answering 200 with well-formed GeoJSON
+    # holding a fraction of the places passes every assertion here, since
+    # nothing was dropped — there was simply less to drop. Floors come from
+    # build.sh; default to 0 so the script still runs standalone.
+    short = [
+        f"{name}: {got} features, floor is {floor}"
+        for name, got, floor in (
+            ("campus_buildings", len(buildings), env_floor("MIN_CAMPUS_BUILDINGS")),
+            ("campus_building_labels", len(labels), env_floor("MIN_CAMPUS_LABELS")),
+        )
+        if got < floor
+    ]
+    if short:
+        raise SystemExit(
+            "  campus data came up short — refusing to build:\n    "
+            + "\n    ".join(short)
+            + f"\n  Source was {src}, {len(features)} features."
+            "\n  If Carleton really did remove this many, lower the floor in build.sh."
         )
 
 

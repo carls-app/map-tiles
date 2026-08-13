@@ -417,6 +417,10 @@ otherwise fail silently, a gap showing up as a map that goes blank at one zoom
 and comes back at the next. It also refuses to produce a `campus.pmtiles` over
 the 100 MB Pages limit. Re-run and check the reported sizes.
 
+Changing a bbox or a zoom moves the tile count and the archive size, so expect
+to move `MIN_TILES` and `MIN_ARCHIVE_BYTES` (see [Floors](#floors)) with it. The
+build says so by name when it stops.
+
 Build intermediates live in `.work/` and are gitignored, along with `dist/`,
 `*.osm.pbf`, `*.mbtiles` and `*.pmtiles`. None of them belong in git on either
 branch.
@@ -465,6 +469,32 @@ built — comparing hashes, not just waiting for a `200` — before running its
 checks. Waiting for a `200` is useless here: the previous deployment answers
 `200` for the whole window, so the checks would pass against stale content and
 prove nothing about what was pushed.
+
+### Floors
+
+Every other check here catches a *structural* failure: a layer the style names
+but the tileset lacks, a source feature that reached neither campus layer, a
+gzipped tile. None of them notice a build that is well-formed and simply holds
+far less than it should — which is what a degraded upstream looks like. The
+Carleton endpoint answering `200` with a handful of records passes every
+assertion in `campus-layers.py`, because nothing was *dropped*; there was less
+to drop. A truncated planet build is the same story.
+
+That matters because the force-push is unconditional and the app renders this in
+production: a bad build replaces a good one and stays up until the next daily
+run. So four floors, in the same config block as `PAGES_FILE_LIMIT`:
+
+| | Floor | Currently |
+| --- | ---: | ---: |
+| `MIN_CAMPUS_BUILDINGS` | 90 | 96 |
+| `MIN_CAMPUS_LABELS` | 115 | 124 |
+| `MIN_TILES` | 900 | 985 |
+| `MIN_ARCHIVE_BYTES` | 5,000,000 | ~6.4 MB |
+
+They are tripwires, not targets — set well below the current numbers so ordinary
+drift never trips them, and a demolished building or a quiet week of OSM edits
+does not fail a build. The two output floors are checked against the finished
+`dist/`, not per-stage, so it does not matter which step came up short.
 
 ## Linting
 
