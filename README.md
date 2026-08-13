@@ -340,16 +340,20 @@ app taps against and which therefore cannot be hidden.
 
 ## Building locally
 
-Needs `bash`, `curl`, `git`, `python3` (3.9+), `node` (20+) and **tippecanoe**
+Needs `bash`, `curl`, `git`, [`mise`](https://mise.jdx.dev), and **tippecanoe**
 (which supplies `tile-join`):
 
 ```console
+$ curl https://mise.run | sh
 $ sudo apt-get install -y tippecanoe     # Debian/Ubuntu
 $ brew install tippecanoe                # macOS
 ```
 
-Everything else — the `pmtiles` CLI, the Python library, the font and sprite
-assets — is fetched and pinned by the script.
+mise reads `mise.toml` and `mise.lock` and installs Python, Node, uv and the
+`pmtiles` CLI at exactly the versions CI uses — `build.sh` runs `mise install`
+itself, so a clean checkout needs nothing else. tippecanoe is the exception: it
+is a C++ build with no prebuilt releases, so it stays a system package and the
+build fails early with that hint if it is missing.
 
 ```console
 $ ./build.sh
@@ -402,7 +406,15 @@ The force-push is unconditional and deliberate. This repo owns `gh-pages`
 entirely; there is nothing there to preserve. Without it, every rebuild would
 add another ~34 MB of blobs to history forever.
 
-`.github/workflows/build.yml` runs on `workflow_dispatch` and monthly on the 3rd.
+`.github/workflows/build.yml` runs on `workflow_dispatch`, monthly on the 3rd,
+and as a **dry run on every pull request**. The PR run does everything except
+publish: it builds, asserts no tile is gzipped, runs `scripts/verify.py`, and
+writes the resulting sizes and layer counts to the run summary. The publish and
+live-site steps are gated on `github.event_name != 'pull_request'`.
+
+That gate exists because the workflow used to be unexercisable without merging
+it, and three separate bugs were found that way — including a verification step
+that passed in one second without verifying anything.
 It needs `permissions: contents: write`, and Pages must be configured to serve
 from the `gh-pages` branch. Before publishing, CI asserts that no tile is
 gzipped and that every fontstack, sprite and attribution the styles name is
@@ -418,18 +430,57 @@ checks. Waiting for a `200` is useless here: the previous deployment answers
 `200` for the whole window, so the checks would pass against stale content and
 prove nothing about what was pushed.
 
+## Linting
+
+`.github/workflows/lint.yml` runs on every push to `main` and every PR:
+
+| Tool | Covers | Pinned in |
+| --- | --- | --- |
+| `ruff check` + `ruff format --check` | `scripts/*.py` | `pyproject.toml` / `uv.lock` |
+| `oxlint` + `oxfmt --check` | `scripts/*.mjs` | `package.json` |
+| `shellcheck` | `build.sh` | `mise.toml` / `mise.lock` |
+| `actionlint` | the workflows themselves | `mise.toml` / `mise.lock` |
+
+Run them locally with `npm run lint` (JS), `uv run ruff check scripts/ && uv run
+ruff format --check scripts/`, and `shellcheck build.sh`.
+
+ruff runs on its own floating defaults — no `[tool.ruff]` section — so its line
+length and rule set track the pinned version rather than a local opinion.
+
+`actionlint` is here for a specific reason: every workflow bug in this repo so
+far only surfaced when a run actually happened, which meant merging first. It
+catches the half of that which is statically detectable.
+
+There is no TypeScript. `scripts/make-style.mjs` is one unannotated file, and a
+`tsc --checkJs` pass over it reports only missing `@types/node` and implicit
+`any` on unannotated parameters — no real findings — so it would be a dependency
+and a config file for nothing. oxlint covers the correctness rules that do not
+need types.
+
+### Why the style generator is JavaScript
+
+It is the only JS in the repo, and it is JS because `@protomaps/basemaps`
+generates **71 of the style's 73 layers**. That package is the upstream
+cartography for the exact tile schema this repo extracts, it is published only
+to npm, and Renovate tracks it. Porting it to Python would mean owning those 71
+layers by hand and re-porting them on every upstream release — which is the
+schema/style drift described above, the failure that renders a blank map with no
+error. The two layers this repo writes itself are the campus ones.
+
 ## Dependencies
 
 Renovate keeps things current, configured in `renovate.json` off the same base
 as [StoDevX/AAO-React-Native][aao]'s.
 
-Four things are pinned, in three places:
+Everything is pinned, in four places:
 
 | What | Where | How Renovate sees it |
 | --- | --- | --- |
 | `@protomaps/basemaps` | `package.json` | npm manager |
+| `pmtiles` (Python), `ruff` | `pyproject.toml` / `uv.lock` | pep621 manager |
 | `actions/*` | `.github/workflows/build.yml` | github-actions manager, digest-pinned |
-| `go-pmtiles`, PyPI `pmtiles` | `build.sh` | custom manager, `# renovate:` comments |
+| Python, Node, `uv`, `go-pmtiles`, `shellcheck`, `actionlint` | `mise.toml` / `mise.lock` | mise manager |
+| `basemaps-assets` commit | `build.sh` | custom manager, `# renovate:` comment |
 | `protomaps/basemaps-assets` | `build.sh` | custom manager, commit digest off `main` |
 
 The `# renovate:` comments above the pins in `build.sh` are load-bearing — they

@@ -1,0 +1,27 @@
+[project]
+name = "aao-map-tiles"
+version = "1.0.0"
+description = "Vector basemap tiles for All About Olaf (StoDevX/AAO-React-Native)"
+requires-python = ">=3.12"
+
+# The one runtime dependency: build.sh's assembler and exploder read PMTiles
+# archives with the official library. Previously pinned by hand in build.sh and
+# installed into a hand-rolled venv; uv.lock does both jobs better.
+dependencies = ["pmtiles==3.7.0"]
+
+[dependency-groups]
+dev = ["ruff==0.15.8"]
+
+# No line length and no formatter settings, so those track the pinned ruff
+# rather than a local opinion.
+[tool.ruff.lint]
+# `extend-select` adds to ruff's defaults rather than replacing them — the
+# default E/F rules stay on, and these four groups stack on top. Between them
+# they caught four of the five defects in the commit that introduced linting
+# here, none of which the defaults see.
+extend-select = [
+  "I",    # import sorting
+  "UP",   # pyupgrade — no reason to write pre-3.12 Python
+  "B",    # bugbear — caught B023, a closure capturing a loop variable
+  "SIM",  # simplify — caught two leaked file handles
+]

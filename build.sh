@@ -83,22 +83,13 @@ CENTER_LON=-93.167
 CENTER_LAT=44.462
 CENTER_ZOOM=14
 
-# Pinned tool and asset versions, so a rebuild in six months produces the same
-# shape of output as one today. Renovate keeps these current — the comments above
-# each one are what it matches on, so keep them attached (see renovate.json).
+# Tool versions are not here: mise.toml and mise.lock own pmtiles, uv, python
+# and node; pyproject.toml and uv.lock own the Python packages; package.json
+# owns the JS ones.
 #
-# The style package version is deliberately not here: scripts/make-style.mjs
-# reads it from the installed @protomaps/basemaps, so package.json is the single
-# place it is pinned.
-
-# renovate: datasource=github-releases depName=protomaps/go-pmtiles
-PMTILES_VERSION="1.28.0"
-
-# renovate: datasource=pypi depName=pmtiles
-PMTILES_PY_VERSION="3.7.0"
-
-# The font and sprite assets are a repo without releases, so this tracks the tip
-# of its default branch by digest.
+# This is the one pin left, because nothing else can express it — the font and
+# sprite assets are a repo without releases, so it tracks the tip of its default
+# branch by digest. Renovate matches on the comment, so keep the two attached.
 # renovate: datasource=git-refs depName=https://github.com/protomaps/basemaps-assets branch=main
 ASSETS_COMMIT="028c18f713baecad011301ff7a69acc39bcc2ae7"
 
@@ -162,31 +153,24 @@ PY
 
 log "Fetching tools"
 
-PMTILES="$WORK/pmtiles"
-if [ ! -x "$PMTILES" ]; then
-  case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64)   PM_ASSET="Linux_x86_64" ;;
-    Linux-aarch64)  PM_ASSET="Linux_arm64" ;;
-    Darwin-x86_64)  PM_ASSET="Darwin_x86_64" ;;
-    Darwin-arm64)   PM_ASSET="Darwin_arm64" ;;
-    *) echo "unsupported platform: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
-  esac
-  curl -fsSL -o "$WORK/pmtiles.tar.gz" \
-    "https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION}_${PM_ASSET}.tar.gz"
-  tar xzf "$WORK/pmtiles.tar.gz" -C "$WORK" pmtiles
-  chmod +x "$PMTILES"
-fi
-"$PMTILES" version
+# Every tool version lives in mise.toml, with mise.lock pinning the exact
+# artifact and checksum per platform. That replaces three separate bootstrap
+# blocks that used to live here — pmtiles, uv, and a hand-rolled venv — and
+# means CI and a laptop install identically.
+command -v mise >/dev/null || {
+  echo "ERROR: mise not found. It manages this repo's toolchain (see mise.toml):" >&2
+  echo "  curl https://mise.run | sh" >&2
+  echo "  https://mise.jdx.dev/getting-started.html" >&2
+  exit 1
+}
+mise install
+mise exec -- pmtiles version
+mise exec -- uv --version
 
-# The assembler reads the archives with the official Python PMTiles library. A
-# venv keeps this off the system interpreter, which some distros protect.
-VENV="$WORK/venv"
-if [ ! -x "$VENV/bin/python" ]; then
-  python3 -m venv "$VENV"
-  "$VENV/bin/pip" install --quiet --upgrade pip
-fi
-"$VENV/bin/pip" install --quiet "pmtiles==${PMTILES_PY_VERSION}"
-PYTHON="$VENV/bin/python"
+PMTILES="mise exec -- pmtiles"
+
+# Run a project script against the locked Python environment.
+py() { mise exec -- uv run --quiet --project "$ROOT" "$@"; }
 
 # tippecanoe tiles the campus layers and tile-join merges them into the basemap.
 # Unlike the rest of the toolchain it is not fetched here — it is a C++ build,
@@ -238,7 +222,7 @@ for tier in "${TIERS[@]}"; do
   tbbox="${rest#*:}"
   f="$WORK/tiers/z${minz}-${maxz}.pmtiles"
   echo "  z${minz}-z${maxz}  $tbbox"
-  "$PMTILES" extract "$PLANET_URL" "$f" \
+  $PMTILES extract "$PLANET_URL" "$f" \
     --bbox="$tbbox" --minzoom="$minz" --maxzoom="$maxz" 2>&1 |
     grep -E 'Extract transferred|Region tiles' | sed 's/^/    /'
   TIER_FILES+=("$f")
@@ -248,7 +232,7 @@ done
 
 log "Merging the basemap tiers"
 
-"$PYTHON" "$ROOT/scripts/assemble.py" \
+py "$ROOT/scripts/assemble.py" \
   "$WORK/basemap.mbtiles" \
   "$DATA_BOUNDS" "$CENTER_LON" "$CENTER_LAT" "$CENTER_ZOOM" \
   "${TIER_FILES[@]}"
@@ -260,7 +244,7 @@ log "Building the campus layers"
 curl -fsSL -o "$WORK/campus-source.geojson" "$CAMPUS_GEOJSON_URL"
 echo "  fetched $(wc -c < "$WORK/campus-source.geojson" | tr -d ' ') bytes from $CAMPUS_GEOJSON_URL"
 
-"$PYTHON" "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
+py "$ROOT/scripts/campus-layers.py" "$WORK/campus-source.geojson" "$WORK"
 
 # Nothing may be dropped: there are barely a hundred features and every one of
 # them is a place someone might be trying to find. Hence --no-feature-limit and
@@ -288,14 +272,14 @@ tile-join -f -pk -o "$WORK/joined.mbtiles" \
   "$WORK/campus_buildings.mbtiles" \
   "$WORK/campus_building_labels.mbtiles" >/dev/null
 
-"$PMTILES" convert "$WORK/joined.mbtiles" "$DIST/campus.pmtiles" --tmpdir="$WORK" 2>&1 | sed 's/^/  /'
-"$PMTILES" verify "$DIST/campus.pmtiles"
-"$PMTILES" show "$DIST/campus.pmtiles" | grep -E 'zoom|bounds|tile type|compression|count' | sed 's/^/  /'
+$PMTILES convert "$WORK/joined.mbtiles" "$DIST/campus.pmtiles" --tmpdir="$WORK" 2>&1 | sed 's/^/  /'
+$PMTILES verify "$DIST/campus.pmtiles"
+$PMTILES show "$DIST/campus.pmtiles" | grep -E 'zoom|bounds|tile type|compression|count' | sed 's/^/  /'
 
 # The exploded tree comes from the joined archive, so the two published forms
 # are the same tileset by construction.
 log "Exploding to tiles/{z}/{x}/{y}.pbf (uncompressed)"
-"$PYTHON" "$ROOT/scripts/explode.py" "$DIST/campus.pmtiles" "$DIST/tiles"
+py "$ROOT/scripts/explode.py" "$DIST/campus.pmtiles" "$DIST/tiles"
 
 # --- 7. glyphs and sprites -------------------------------------------------
 #
@@ -356,7 +340,7 @@ cp "$ROOT/site/.nojekyll" "$DIST/.nojekyll"
 # Every mismatch this catches — style against schema, style against vendored
 # assets — renders a blank or label-less map without raising an error, which is
 # miserable to debug on device.
-"$PYTHON" "$ROOT/scripts/verify.py" "$DIST"
+py "$ROOT/scripts/verify.py" "$DIST"
 
 # --- 9. report -------------------------------------------------------------
 

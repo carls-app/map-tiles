@@ -11,8 +11,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "tool versions pinned in build.sh",
-      "managerFilePatterns": ["/^build\\.sh$/"],
+      "description": "tool versions pinned in build.sh and in workflow run blocks",
+      "managerFilePatterns": ["/^build\\.sh$/", "/^\\.github/workflows/.+\\.yml$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+=\"(?<currentValue>[^\"]+)\""
       ],

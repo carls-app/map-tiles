@@ -42,7 +42,9 @@ def main(archive: str, outdir: str) -> None:
             # A gzip member here would mean double compression, which renders as
             # an empty map rather than an error on device.
             if raw[:2] == b"\x1f\x8b":
-                raise SystemExit(f"tile {z}/{x}/{y} is still gzipped after decompression")
+                raise SystemExit(
+                    f"tile {z}/{x}/{y} is still gzipped after decompression"
+                )
             path = os.path.join(outdir, str(z), str(x))
             os.makedirs(path, exist_ok=True)
             with open(os.path.join(path, f"{y}.pbf"), "wb") as out:

@@ -30,6 +30,7 @@ import json
 import os
 import sys
 
+
 # Kept deliberately small: every property here is paid for in every tile. The
 # source carries floor lists, office lists, photo URLs and prose descriptions,
 # none of which a basemap needs — the app already fetches the full record.
@@ -56,7 +57,8 @@ def polygons_of(geometry: dict) -> list:
 
 
 def main(src: str, outdir: str) -> None:
-    data = json.load(open(src))
+    with open(src) as f:
+        data = json.load(f)
     features = data.get("features") or []
     if not features:
         raise SystemExit(f"{src}: no features")
@@ -67,11 +69,17 @@ def main(src: str, outdir: str) -> None:
 
     for feature in features:
         geometry = feature.get("geometry") or {}
-        parts = geometry.get("geometries") if geometry.get("type") == "GeometryCollection" else [geometry]
+        parts = (
+            geometry.get("geometries")
+            if geometry.get("type") == "GeometryCollection"
+            else [geometry]
+        )
         parts = parts or []
 
         if not feature.get("id"):
-            problems.append(f"feature with no id: {(feature.get('properties') or {}).get('name')!r}")
+            problems.append(
+                f"feature with no id: {(feature.get('properties') or {}).get('name')!r}"
+            )
             continue
 
         rings = []
@@ -84,42 +92,59 @@ def main(src: str, outdir: str) -> None:
         props = properties(feature)
 
         if rings:
-            buildings.append({
-                "type": "Feature",
-                "geometry": {"type": "MultiPolygon", "coordinates": rings},
-                "properties": props,
-            })
+            buildings.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "MultiPolygon", "coordinates": rings},
+                    "properties": props,
+                }
+            )
 
         if len(points) > 1:
-            problems.append(f"{feature['id']}: {len(points)} label anchors, using the first")
+            problems.append(
+                f"{feature['id']}: {len(points)} label anchors, using the first"
+            )
         if points:
-            labels.append({
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": points[0]},
-                "properties": {**props, "hasFootprint": bool(rings)},
-            })
+            labels.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": points[0]},
+                    "properties": {**props, "hasFootprint": bool(rings)},
+                }
+            )
         else:
             problems.append(f"{feature['id']}: no label anchor, will not be labelled")
 
     os.makedirs(outdir, exist_ok=True)
-    for name, collection in (("campus_buildings", buildings), ("campus_building_labels", labels)):
+    for name, collection in (
+        ("campus_buildings", buildings),
+        ("campus_building_labels", labels),
+    ):
         with open(os.path.join(outdir, f"{name}.geojson"), "w") as out:
             json.dump({"type": "FeatureCollection", "features": collection}, out)
 
     multi = sum(1 for f in buildings if len(f["geometry"]["coordinates"]) > 1)
     print(f"  {len(features)} source features")
-    print(f"  campus_buildings       {len(buildings)} footprints ({multi} merged from several polygons)")
-    print(f"  campus_building_labels {len(labels)} anchors ({sum(1 for f in labels if not f['properties']['hasFootprint'])} without a footprint)")
+    print(
+        f"  campus_buildings       {len(buildings)} footprints ({multi} merged from several polygons)"
+    )
+    print(
+        f"  campus_building_labels {len(labels)} anchors ({sum(1 for f in labels if not f['properties']['hasFootprint'])} without a footprint)"
+    )
     for problem in problems:
         print(f"  note: {problem}")
 
     # Every source feature must come through on at least one layer. The brief is
     # explicit that none of these may be dropped, and a silent shortfall here
     # would look identical to a tiling problem later.
-    covered = {f["properties"]["buildingId"] for f in buildings} | {f["properties"]["buildingId"] for f in labels}
+    covered = {f["properties"]["buildingId"] for f in buildings} | {
+        f["properties"]["buildingId"] for f in labels
+    }
     missing = {f["id"] for f in features if f.get("id")} - covered
     if missing:
-        raise SystemExit(f"  {len(missing)} source features reached neither layer: {sorted(missing)[:10]}")
+        raise SystemExit(
+            f"  {len(missing)} source features reached neither layer: {sorted(missing)[:10]}"
+        )
 
 
 if __name__ == "__main__":
