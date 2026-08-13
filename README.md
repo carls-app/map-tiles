@@ -340,18 +340,20 @@ app taps against and which therefore cannot be hidden.
 
 ## Building locally
 
-Needs `bash`, `curl`, `git`, `python3` (for one config check), `node` (20+) and
-**tippecanoe** (which supplies `tile-join`):
+Needs `bash`, `curl`, `git`, [`mise`](https://mise.jdx.dev), and **tippecanoe**
+(which supplies `tile-join`):
 
 ```console
+$ curl https://mise.run | sh
 $ sudo apt-get install -y tippecanoe     # Debian/Ubuntu
 $ brew install tippecanoe                # macOS
 ```
 
-Everything else — the `pmtiles` CLI, `uv`, the Python interpreter and library,
-the font and sprite assets — is fetched and pinned by the script. Python comes
-from `.python-version` (3.14) and `uv.lock`, so the build runs the same
-interpreter and the same package versions everywhere.
+mise reads `mise.toml` and `mise.lock` and installs Python, Node, uv and the
+`pmtiles` CLI at exactly the versions CI uses — `build.sh` runs `mise install`
+itself, so a clean checkout needs nothing else. tippecanoe is the exception: it
+is a C++ build with no prebuilt releases, so it stays a system package and the
+build fails early with that hint if it is missing.
 
 ```console
 $ ./build.sh
@@ -436,8 +438,8 @@ prove nothing about what was pushed.
 | --- | --- | --- |
 | `ruff check` + `ruff format --check` | `scripts/*.py` | `pyproject.toml` / `uv.lock` |
 | `oxlint` + `oxfmt --check` | `scripts/*.mjs` | `package.json` |
-| `shellcheck` | `build.sh` | distro package |
-| `actionlint` | the workflows themselves | `lint.yml`, via a `# renovate:` comment |
+| `shellcheck` | `build.sh` | `mise.toml` / `mise.lock` |
+| `actionlint` | the workflows themselves | `mise.toml` / `mise.lock` |
 
 Run them locally with `npm run lint` (JS), `uv run ruff check scripts/ && uv run
 ruff format --check scripts/`, and `shellcheck build.sh`.
@@ -470,14 +472,15 @@ error. The two layers this repo writes itself are the campus ones.
 Renovate keeps things current, configured in `renovate.json` off the same base
 as [StoDevX/AAO-React-Native][aao]'s.
 
-Four things are pinned, in three places:
+Everything is pinned, in four places:
 
 | What | Where | How Renovate sees it |
 | --- | --- | --- |
 | `@protomaps/basemaps` | `package.json` | npm manager |
 | `pmtiles` (Python), `ruff` | `pyproject.toml` / `uv.lock` | pep621 manager |
 | `actions/*` | `.github/workflows/build.yml` | github-actions manager, digest-pinned |
-| `go-pmtiles`, `uv`, `actionlint` | `build.sh`, `lint.yml` | custom manager, `# renovate:` comments |
+| Python, Node, `uv`, `go-pmtiles`, `shellcheck`, `actionlint` | `mise.toml` / `mise.lock` | mise manager |
+| `basemaps-assets` commit | `build.sh` | custom manager, `# renovate:` comment |
 | `protomaps/basemaps-assets` | `build.sh` | custom manager, commit digest off `main` |
 
 The `# renovate:` comments above the pins in `build.sh` are load-bearing — they

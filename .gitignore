@@ -8,6 +8,9 @@
 # uv's project environment. uv.lock is committed; this is not.
 /.venv/
 
+# Personal mise overrides. mise.toml and mise.lock are committed; this is not.
+/mise.local.toml
+
 node_modules/
 
 # Never commit any of these, on either branch. They are hundreds of megabytes

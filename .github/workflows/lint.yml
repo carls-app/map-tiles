@@ -17,11 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      # The interpreter comes from .python-version, and the tools from uv.lock,
-      # so CI runs exactly what a local `uv run` does.
+      - uses: jdx/mise-action@v3
+      # The interpreter comes from mise.toml/mise.lock and the packages from
+      # uv.lock, so CI runs exactly what a local `mise install` gives you.
       - run: uv sync --locked
       - name: ruff check
         run: uv run ruff check --output-format=github scripts/
@@ -32,10 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "26"
-          cache: npm
+      - uses: jdx/mise-action@v3
       - run: npm ci
       - name: oxlint
         run: npx oxlint --format=github scripts/
@@ -46,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v3
       - name: shellcheck
         # build.sh is the whole pipeline and runs unattended on a schedule, so an
         # unquoted expansion or a typo'd variable is a silent bad publish.
@@ -55,14 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v3
       - name: actionlint
         # Every workflow bug in this repo so far only surfaced when a run
         # actually happened, which needed a merge. This catches the static half.
-        run: |
-          # renovate: datasource=github-releases depName=rhysd/actionlint
-          ACTIONLINT_VERSION="1.7.7"
-
-          curl -fsSL -o actionlint.tar.gz \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          tar xzf actionlint.tar.gz actionlint
-          ./actionlint -color
+        run: actionlint -color
