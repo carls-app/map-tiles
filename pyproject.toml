@@ -2,7 +2,7 @@
 name = "aao-map-tiles"
 version = "1.0.0"
 description = "Vector basemap tiles for All About Olaf (StoDevX/AAO-React-Native)"
-requires-python = ">=3.12"
+requires-python = "==3.14.7"
 
 # The one runtime dependency: build.sh's assembler and exploder read PMTiles
 # archives with the official library. Previously pinned by hand in build.sh and

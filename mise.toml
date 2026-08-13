@@ -10,7 +10,7 @@ lockfile = true
 
 [tools]
 python = "3.14"
-node = "26"
+node = "26.7.0"
 
 # Resolves the Python interpreter and the locked packages for the build scripts.
 uv = "0.12.3"
