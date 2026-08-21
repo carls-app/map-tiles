@@ -14,7 +14,7 @@
     "@protomaps/basemaps": "5.7.2"
   },
   "devDependencies": {
-    "oxfmt": "0.63.0",
+    "oxfmt": "0.64.0",
     "oxlint": "1.78.0"
   }
 }
