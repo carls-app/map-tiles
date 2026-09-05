@@ -13,7 +13,7 @@ python = "3.14"
 node = "26.7.0"
 
 # Resolves the Python interpreter and the locked packages for the build scripts.
-uv = "0.12.3"
+uv = "0.12.10"
 
 # Linting. Both are single static binaries, which is why they belong here rather
 # than in a package manifest.
