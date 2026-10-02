@@ -2,7 +2,7 @@
 name = "aao-map-tiles"
 version = "1.0.0"
 description = "Vector basemap tiles for All About Olaf (StoDevX/AAO-React-Native)"
-requires-python = "==3.14.7"
+requires-python = "==3.14.8"
 
 # The one runtime dependency: build.sh's assembler and exploder read PMTiles
 # archives with the official library. Previously pinned by hand in build.sh and
@@ -10,7 +10,7 @@ requires-python = "==3.14.7"
 dependencies = ["pmtiles==3.7.0"]
 
 [dependency-groups]
-dev = ["ruff==0.16.2"]
+dev = ["ruff==0.16.10"]
 
 # No line length and no formatter settings, so those track the pinned ruff
 # rather than a local opinion.
