@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AAO Campus Basemap</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <style>
+      html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, sans-serif; }
+      #map { position: absolute; inset: 0; }
+      #panel {
+        position: absolute; top: 10px; left: 10px; z-index: 1;
+        background: rgba(255,255,255,.94); padding: 10px 12px; border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.25); max-width: 320px;
+      }
+      #panel h1 { font-size: 14px; margin: 0 0 6px; }
+      #panel p { margin: 6px 0 0; color: #444; font-size: 12px; }
+      #panel code { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+      #status { margin-top: 6px; font-size: 12px; }
+      .err { color: #a00; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="panel">
+      <h1>All About Olaf campus basemap</h1>
+      <label><input type="radio" name="style" value="style.json" checked /> <code>style.json</code> (z/x/y)</label><br />
+      <label><input type="radio" name="style" value="style-pmtiles.json" /> <code>style-pmtiles.json</code></label>
+      <div id="status"></div>
+      <p>
+        Basemap only — streets, water, landuse, footprints, labels. Campus building
+        data is not here; the app fetches it from ccc-server and draws it on top.
+      </p>
+      <p>© OpenStreetMap contributors (ODbL)</p>
+    </div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+    <script>
+      // This preview page is MapLibre GL JS, which needs the pmtiles:// protocol
+      // registered at runtime. MapLibre Native cannot do this — there it is a
+      // compile-time flag — which is exactly why the z/x/y tree also exists.
+      maplibregl.addProtocol("pmtiles", new pmtiles.Protocol().tile);
+
+      const status = document.getElementById("status");
+      let map;
+
+      function load(styleUrl) {
+        status.textContent = "loading " + styleUrl + "…";
+        status.className = "";
+        if (map) map.remove();
+        map = new maplibregl.Map({ container: "map", style: styleUrl, hash: true });
+        map.addControl(new maplibregl.NavigationControl());
+        map.addControl(new maplibregl.ScaleControl());
+        map.on("load", () => { status.textContent = "loaded " + styleUrl; });
+        map.on("error", (e) => {
+          status.textContent = "error: " + (e.error && e.error.message ? e.error.message : e.type);
+          status.className = "err";
+          console.error(e);
+        });
+      }
+
+      for (const input of document.querySelectorAll('input[name=style]')) {
+        input.addEventListener("change", () => load(input.value));
+      }
+      load("style.json");
+    </script>
+  </body>
+</html>
